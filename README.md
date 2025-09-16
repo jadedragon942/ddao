@@ -1,9 +1,9 @@
-# DynDAO - Dynamic Database Access Object
+# DDAO - Dynamic Database Access Object
 
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 
-DynDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for Go that provides a unified interface for working with different database systems. It supports dynamic schema definition and offers consistent CRUD operations across multiple database backends.
+DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for Go that provides a unified interface for working with different database systems. It supports dynamic schema definition and offers consistent CRUD operations across multiple database backends.
 
 ## 🚀 Features
 
@@ -52,7 +52,7 @@ go get github.com/go-sql-driver/mysql
 
 ## 🏗 Architecture
 
-DynDAO consists of four main components:
+DDAO consists of four main components:
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
@@ -370,7 +370,7 @@ if err != nil {
 
 ## 🧪 Testing
 
-DynDAO includes a comprehensive test suite. Run tests for specific databases:
+DDAO includes a comprehensive test suite. Run tests for specific databases:
 
 ```bash
 # Run SQLite tests (always work)
@@ -445,7 +445,7 @@ type Storage interface {
 
 ### UPSERT Behavior
 
-DynDAO implements database-specific UPSERT (insert-or-update) operations:
+DDAO implements database-specific UPSERT (insert-or-update) operations:
 
 - **SQLite**: `INSERT OR REPLACE INTO ...`
 - **PostgreSQL/YugabyteDB**: `INSERT ... ON CONFLICT DO UPDATE SET ...`
@@ -454,7 +454,7 @@ DynDAO implements database-specific UPSERT (insert-or-update) operations:
 
 ### Data Type Mapping
 
-DynDAO automatically maps generic types to database-specific types:
+DDAO automatically maps generic types to database-specific types:
 
 | Generic Type | SQLite | PostgreSQL | CockroachDB | YugabyteDB | TiDB |
 |--------------|--------|------------|-------------|------------|------|
@@ -466,7 +466,7 @@ DynDAO automatically maps generic types to database-specific types:
 
 ### Field Ordering Consistency
 
-DynDAO ensures consistent field ordering across operations to prevent data corruption during read/write operations. This is particularly important when dealing with dynamic schemas where field order can vary.
+DDAO ensures consistent field ordering across operations to prevent data corruption during read/write operations. This is particularly important when dealing with dynamic schemas where field order can vary.
 
 ## 🔒 Best Practices
 
@@ -492,7 +492,7 @@ DynDAO ensures consistent field ordering across operations to prevent data corru
 - For high-volume operations, consider batch processing
 
 ### 5. Security
-- Use parameterized queries (handled automatically by DynDAO)
+- Use parameterized queries (handled automatically by DDAO)
 - Validate input data before database operations
 - Use appropriate database user permissions
 
@@ -539,8 +539,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Database driver maintainers for excellent Go database libraries
 - The Go community for continuous innovation in database tooling
-- Contributors who help improve DynDAO
+- Contributors who help improve DDAO
 
 ---
 
-**DynDAO** - Making multi-database development simple and consistent! 🚀# ddao
+**DDAO** - Making multi-database development simple and consistent! 🚀# ddao
