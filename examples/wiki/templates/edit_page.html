@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Wiki</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.0/marked.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">Wiki</a>
+            <div class="nav-links">
+                {{if .LoggedIn}}
+                    <span>Welcome, {{.User.Username}}!</span>
+                    <a href="/logout">Logout</a>
+                {{else}}
+                    <a href="/login">Login</a>
+                    <a href="/register">Register</a>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="edit-container">
+            <h1>{{if .IsEdit}}Edit{{else}}Create{{end}} Page</h1>
+
+            <form method="POST" action="/edit" class="edit-form">
+                {{if .IsEdit}}
+                    <input type="hidden" name="page_id" value="{{.Page.ID}}">
+                {{end}}
+
+                <div class="form-group">
+                    <label for="title">Page Title:</label>
+                    <input type="text" id="title" name="title" value="{{.Page.Title}}" required>
+                </div>
+
+                <div class="editor-container">
+                    <div class="editor-header">
+                        <button type="button" id="togglePreview" class="btn btn-secondary">Show Preview</button>
+                    </div>
+
+                    <div class="editor-content">
+                        <div class="editor-panel" id="editorPanel">
+                            <label for="content">Content (Markdown):</label>
+                            <textarea id="content" name="content" placeholder="Enter your markdown content here...">{{.Page.Content}}</textarea>
+                        </div>
+
+                        <div class="preview-panel" id="previewPanel" style="display: none;">
+                            <label>Preview:</label>
+                            <div id="markdownPreview" class="markdown-preview"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">{{if .IsEdit}}Update{{else}}Create{{end}} Page</button>
+                    <a href="{{if .IsEdit}}/page?title={{.Page.Title}}{{else}}/{{end}}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        let previewMode = false;
+        const toggleBtn = document.getElementById('togglePreview');
+        const editorPanel = document.getElementById('editorPanel');
+        const previewPanel = document.getElementById('previewPanel');
+        const contentTextarea = document.getElementById('content');
+        const markdownPreview = document.getElementById('markdownPreview');
+
+        function updatePreview() {
+            const content = contentTextarea.value;
+            const html = marked.parse(content);
+            markdownPreview.innerHTML = html;
+            hljs.highlightAll();
+        }
+
+        toggleBtn.addEventListener('click', function() {
+            previewMode = !previewMode;
+
+            if (previewMode) {
+                editorPanel.style.display = 'none';
+                previewPanel.style.display = 'block';
+                toggleBtn.textContent = 'Show Editor';
+                updatePreview();
+            } else {
+                editorPanel.style.display = 'block';
+                previewPanel.style.display = 'none';
+                toggleBtn.textContent = 'Show Preview';
+            }
+        });
+
+        // Auto-update preview when in preview mode
+        contentTextarea.addEventListener('input', function() {
+            if (previewMode) {
+                updatePreview();
+            }
+        });
+
+        // Initialize preview
+        updatePreview();
+        hljs.highlightAll();
+    </script>
+</body>
+</html>

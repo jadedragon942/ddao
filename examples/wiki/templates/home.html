@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}} - Wiki</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.0/marked.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">Wiki</a>
+            <div class="nav-links">
+                {{if .LoggedIn}}
+                    <span>Welcome, {{.User.Username}}!</span>
+                    <a href="/logout">Logout</a>
+                {{else}}
+                    <a href="/login">Login</a>
+                    <a href="/register">Register</a>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="home-container">
+            <h1>Welcome to the Wiki</h1>
+
+            {{if .LoggedIn}}
+                <div class="actions">
+                    <a href="/edit?title=Main+Page" class="btn btn-primary">Create Main Page</a>
+                </div>
+
+                <div class="quick-actions">
+                    <h2>Quick Actions</h2>
+                    <p>Start by creating your first wiki page or browse existing pages.</p>
+                    <input type="text" id="pageTitle" placeholder="Enter page title..." class="page-input">
+                    <div class="action-buttons">
+                        <button onclick="viewPage()" class="btn btn-secondary">View Page</button>
+                        <button onclick="editPage()" class="btn btn-primary">Create/Edit Page</button>
+                    </div>
+                </div>
+            {{else}}
+                <div class="welcome-message">
+                    <h2>Get Started</h2>
+                    <p>Please <a href="/login">login</a> or <a href="/register">register</a> to start creating and editing wiki pages.</p>
+                </div>
+            {{end}}
+        </div>
+    </main>
+
+    <script>
+        function viewPage() {
+            const title = document.getElementById('pageTitle').value.trim();
+            if (title) {
+                window.location.href = '/page?title=' + encodeURIComponent(title);
+            }
+        }
+
+        function editPage() {
+            const title = document.getElementById('pageTitle').value.trim();
+            if (title) {
+                window.location.href = '/edit?title=' + encodeURIComponent(title);
+            }
+        }
+
+        document.getElementById('pageTitle').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                viewPage();
+            }
+        });
+
+        hljs.highlightAll();
+    </script>
+</body>
+</html>
