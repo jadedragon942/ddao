@@ -243,50 +243,45 @@ func (s *TiDBStorage) FindByKey(ctx context.Context, tblName, key, value string)
 	obj.TableName = tbl.TableName
 	obj.Fields = make(map[string]any)
 
+	// Create a slice to maintain field order and build the query
+	fieldDefs := make([]schema.ColumnData, 0, len(tbl.Fields))
 	for _, field := range tbl.Fields {
 		columns = append(columns, field.Name)
+		fieldDefs = append(fieldDefs, field)
 
 		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
 				columnPointer := new(*string)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = columnPointer
+				columnPointers = append(columnPointers, columnPointer)
 			} else {
 				columnPointer := new(string)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
 			}
 		case "INTEGER", "INT":
 			if field.Nullable {
 				columnPointer := new(*int64)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = columnPointer
+				columnPointers = append(columnPointers, columnPointer)
 			} else {
 				columnPointer := new(int64)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
 			}
 		case "REAL", "FLOAT":
 			columnPointer := new(float64)
-			columnPointers = append(columnPointers, &columnPointer)
-			obj.Fields[field.Name] = columnPointer
+			columnPointers = append(columnPointers, columnPointer)
 		case "BLOB":
 			columnPointer := new([]byte)
-			columnPointers = append(columnPointers, &columnPointer)
-			obj.Fields[field.Name] = columnPointer
+			columnPointers = append(columnPointers, columnPointer)
 		case "BOOLEAN":
 			columnPointer := new(bool)
-			columnPointers = append(columnPointers, &columnPointer)
-			obj.Fields[field.Name] = columnPointer
+			columnPointers = append(columnPointers, columnPointer)
 		case "JSON":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
-			obj.Fields[field.Name] = columnPointer
+			columnPointers = append(columnPointers, columnPointer)
 		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 		default:
 			return nil, fmt.Errorf("unsupported data type %s for field %s", field.DataType, field.Name)
 		}
@@ -303,6 +298,50 @@ func (s *TiDBStorage) FindByKey(ctx context.Context, tblName, key, value string)
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	// Now populate the object fields with the scanned values
+	for i, field := range fieldDefs {
+		columnName := field.Name
+		pointer := columnPointers[i]
+
+		switch strings.ToUpper(field.DataType) {
+		case "TEXT", "VARCHAR", "CHAR":
+			if field.Nullable {
+				if val := pointer.(**string); *val != nil {
+					obj.Fields[columnName] = **val
+				} else {
+					obj.Fields[columnName] = nil
+				}
+			} else {
+				obj.Fields[columnName] = *pointer.(*string)
+			}
+		case "INTEGER", "INT":
+			if field.Nullable {
+				if val := pointer.(**int64); *val != nil {
+					obj.Fields[columnName] = **val
+				} else {
+					obj.Fields[columnName] = nil
+				}
+			} else {
+				obj.Fields[columnName] = *pointer.(*int64)
+			}
+		case "REAL", "FLOAT":
+			obj.Fields[columnName] = *pointer.(*float64)
+		case "BLOB":
+			obj.Fields[columnName] = *pointer.(*[]byte)
+		case "BOOLEAN":
+			obj.Fields[columnName] = *pointer.(*bool)
+		case "JSON":
+			obj.Fields[columnName] = *pointer.(*string)
+		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
+			obj.Fields[columnName] = *pointer.(*string)
+		}
+
+		// Set the ID separately
+		if columnName == "id" {
+			obj.ID = obj.Fields[columnName].(string)
+		}
 	}
 
 	return &obj, nil

@@ -9,6 +9,6 @@ RUN go mod download
 
 COPY . .
 
-ENV MYSQL_TEST_URL="ddao:ddao_password@tcp(mysql:3306)/ddao_test"
+ENV TIDB_TEST_URL="ddao:ddao_password@tcp(mysql:3306)/ddao_test"
 
 CMD ["go", "test", "-v", "./storage/tidb", "./object", "./orm", "./schema"]

@@ -49,6 +49,11 @@ func TestTiDBLocal(t *testing.T) {
 		t.Skip("skipping local TiDB test in short mode")
 	}
 
+	// Skip if we're running in Docker (MySQL environment)
+	if os.Getenv("TIDB_TEST_URL") != "" {
+		t.Skip("skipping local TiDB test when TIDB_TEST_URL is set (running in Docker)")
+	}
+
 	connStr := "root@tcp(localhost:4000)/test"
 	storage := New()
 	ctx := context.Background()
