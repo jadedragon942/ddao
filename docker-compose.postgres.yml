@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  ddao-postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - CGO_ENABLED=1
+      - POSTGRES_TEST_URL=postgres://ddao:ddao_password@postgres:5432/ddao_test?sslmode=disable
+    depends_on:
+      - postgres
+    networks:
+      - ddao-postgres-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ddao_test
+      POSTGRES_USER: ddao
+      POSTGRES_PASSWORD: ddao_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ddao-postgres-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ddao -d ddao_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+
+networks:
+  ddao-postgres-network:

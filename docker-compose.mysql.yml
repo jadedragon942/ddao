@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  ddao-mysql:
+    build:
+      context: .
+      dockerfile: Dockerfile.mysql
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - CGO_ENABLED=1
+      - TIDB_TEST_URL=ddao:ddao_password@tcp(mysql:3306)/ddao_test
+    depends_on:
+      - mysql
+    networks:
+      - ddao-mysql-network
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ddao_test
+      MYSQL_USER: ddao
+      MYSQL_PASSWORD: ddao_password
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ddao-mysql-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql_data:
+
+networks:
+  ddao-mysql-network:

@@ -1,0 +1,14 @@
+FROM golang:1.25.1-alpine AS test
+
+WORKDIR /app
+
+RUN apk add --no-cache gcc musl-dev
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ENV POSTGRES_TEST_URL="postgres://ddao:ddao_password@postgres:5432/ddao_test?sslmode=disable"
+
+CMD ["go", "test", "-v", "./storage/postgres", "./object", "./orm", "./schema"]

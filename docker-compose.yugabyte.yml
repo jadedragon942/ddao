@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  ddao-yugabyte:
+    build:
+      context: .
+      dockerfile: Dockerfile.yugabyte
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - CGO_ENABLED=1
+      - YUGABYTE_TEST_URL=postgres://yugabyte@yugabyte:5433/yugabyte?sslmode=disable
+    depends_on:
+      - yugabyte
+    networks:
+      - ddao-yugabyte-network
+
+  yugabyte:
+    image: yugabytedb/yugabyte:latest
+    command: bin/yugabyted start --daemon=false --ui=false
+    ports:
+      - "5433:5433"
+      - "9000:9000"
+    volumes:
+      - yugabyte_data:/home/yugabyte/yb_data
+    networks:
+      - ddao-yugabyte-network
+    healthcheck:
+      test: ["CMD", "bin/yugabyted", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  yugabyte_data:
+
+networks:
+  ddao-yugabyte-network:
