@@ -218,11 +218,8 @@ func (s *SQLiteStorage) FindByKey(ctx context.Context, tblName, key, value strin
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
 
-	// Create ordered slices of fields to ensure consistent mapping
-	fieldNames := make([]string, 0, len(tbl.Fields))
-	for _, field := range tbl.Fields {
-		fieldNames = append(fieldNames, field.Name)
-	}
+	// Use the field order from the table schema to ensure consistent mapping
+	fieldNames := tbl.FieldOrder
 
 	columns := make([]string, 0, len(fieldNames))
 	columnPointers := make([]any, 0, len(fieldNames))
@@ -261,11 +258,21 @@ func (s *SQLiteStorage) FindByKey(ctx context.Context, tblName, key, value strin
 			columnPointer := new(bool)
 			columnPointers = append(columnPointers, columnPointer)
 		case "JSON":
-			columnPointer := new(string)
-			columnPointers = append(columnPointers, columnPointer)
+			if field.Nullable {
+				columnPointer := new(*string)
+				columnPointers = append(columnPointers, columnPointer)
+			} else {
+				columnPointer := new(string)
+				columnPointers = append(columnPointers, columnPointer)
+			}
 		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
-			columnPointer := new(string)
-			columnPointers = append(columnPointers, columnPointer)
+			if field.Nullable {
+				columnPointer := new(*string)
+				columnPointers = append(columnPointers, columnPointer)
+			} else {
+				columnPointer := new(string)
+				columnPointers = append(columnPointers, columnPointer)
+			}
 		default:
 			return nil, fmt.Errorf("unsupported data type %s for field %s", field.DataType, field.Name)
 		}
@@ -329,7 +336,15 @@ func (s *SQLiteStorage) FindByKey(ctx context.Context, tblName, key, value strin
 				obj.Fields[field.Name] = *columnPointers[i].(*string)
 			}
 		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
-			obj.Fields[field.Name] = *columnPointers[i].(*string)
+			if field.Nullable {
+				if ptr, ok := columnPointers[i].(**string); ok && ptr != nil && *ptr != nil {
+					obj.Fields[field.Name] = **ptr
+				} else {
+					obj.Fields[field.Name] = nil
+				}
+			} else {
+				obj.Fields[field.Name] = *columnPointers[i].(*string)
+			}
 		}
 	}
 
