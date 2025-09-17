@@ -29,3 +29,7 @@ oracle:
 sqlserver:
 	# SQLServer
 	docker-compose -f docker-compose.sqlserver.yml up ddao-sqlserver
+
+clean:
+	docker-compose down --remove-orphans --volumes
+	docker system prune -f
