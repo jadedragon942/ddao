@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  ddao-sqlserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.sqlserver
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - CGO_ENABLED=1
+      - SQLSERVER_TEST_URL=sqlserver://ddao:ddao_Password123@sqlserver:1433?database=ddao_test
+    depends_on:
+      - sqlserver
+    networks:
+      - ddao-sqlserver-network
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      SA_PASSWORD: ddao_Password123
+      ACCEPT_EULA: Y
+      MSSQL_DB: ddao_test
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - ddao-sqlserver-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ddao_Password123 -Q 'SELECT 1'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  sqlserver_data:
+
+networks:
+  ddao-sqlserver-network:

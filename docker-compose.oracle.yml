@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  ddao-oracle:
+    build:
+      context: .
+      dockerfile: Dockerfile.oracle
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - CGO_ENABLED=1
+      - ORACLE_TEST_URL=oracle://ddao:ddao_password@oracle:1521/XE
+    depends_on:
+      - oracle
+    networks:
+      - ddao-oracle-network
+
+  oracle:
+    image: gvenzl/oracle-xe:21-slim
+    environment:
+      ORACLE_PASSWORD: ddao_password
+      APP_USER: ddao
+      APP_USER_PASSWORD: ddao_password
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    networks:
+      - ddao-oracle-network
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  oracle_data:
+
+networks:
+  ddao-oracle-network:

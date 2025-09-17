@@ -22,3 +22,10 @@ scylla:
 	# ScyllaDB (with database)
 	docker-compose -f docker-compose.scylla.yml up ddao-scylla
 
+oracle:
+	# Oracle
+	docker-compose -f docker-compose.oracle.yml up ddao-oracle
+
+sqlserver:
+	# SQLServer
+	docker-compose -f docker-compose.sqlserver.yml up ddao-sqlserver
