@@ -1,0 +1,55 @@
+package main
+
+import (
+	"fmt"
+	"net"
+	"time"
+)
+
+func testLDAPServer() {
+	conn, err := net.Dial("tcp", "localhost:1389")
+	if err != nil {
+		fmt.Printf("Failed to connect: %v\n", err)
+		return
+	}
+	defer conn.Close()
+
+	commands := []string{
+		"HELP",
+		"BIND cn=admin,dc=example,dc=com admin",
+		"SEARCH dc=example,dc=com",
+		"ADD cn=testuser,ou=users,dc=example,dc=com objectClass=person givenName=Test sn=User userPassword=testpass",
+		"BIND cn=testuser,ou=users,dc=example,dc=com testpass",
+		"SEARCH cn=testuser,ou=users,dc=example,dc=com",
+		"DELETE cn=testuser,ou=users,dc=example,dc=com",
+	}
+
+	for _, cmd := range commands {
+		fmt.Printf("\n=== Testing: %s ===\n", cmd)
+
+		// Send command
+		_, err := conn.Write([]byte(cmd))
+		if err != nil {
+			fmt.Printf("Failed to send command: %v\n", err)
+			continue
+		}
+
+		// Read response
+		buffer := make([]byte, 4096)
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		n, err := conn.Read(buffer)
+		if err != nil {
+			fmt.Printf("Failed to read response: %v\n", err)
+			continue
+		}
+
+		fmt.Printf("Response: %s\n", string(buffer[:n]))
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func main() {
+	fmt.Println("Testing LDAP Server...")
+	testLDAPServer()
+	fmt.Println("Tests completed.")
+}

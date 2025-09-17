@@ -7,7 +7,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 
 ## 🚀 Features
 
-- **Multi-Database Support**: SQLite, PostgreSQL, SQL Server, Oracle, CockroachDB, YugabyteDB, TiDB, and ScyllaDB
+- **Multi-Database Support**: SQLite, PostgreSQL, SQL Server, Oracle, CockroachDB, YugabyteDB, TiDB, ScyllaDB, and Amazon S3
 - **Dynamic Schema Definition**: Define table schemas programmatically with flexible field types
 - **Unified Interface**: Same API works across all supported databases
 - **Type-Safe Operations**: Built-in type conversion and validation
@@ -29,6 +29,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 | **YugabyteDB** | `github.com/jackc/pgx/v5` | ✅ Full Support | Distributed SQL, PostgreSQL compatible |
 | **TiDB** | `github.com/go-sql-driver/mysql` | ✅ Full Support | Horizontal scaling, MySQL compatible |
 | **ScyllaDB** | `github.com/scylladb/gocql` | ✅ Full Support | High-performance NoSQL, Cassandra compatible |
+| **Amazon S3** | `github.com/aws/aws-sdk-go-v2/service/s3` | ✅ Full Support | Object storage, S3-compatible services, Cloud-native |
 
 ## 🛠 Installation
 
@@ -68,6 +69,9 @@ go get github.com/go-sql-driver/mysql
 
 # ScyllaDB (included)
 go get github.com/scylladb/gocql
+
+# Amazon S3 (included)
+go get github.com/aws/aws-sdk-go-v2/service/s3
 ```
 
 ## 🏗 Architecture
@@ -360,6 +364,18 @@ storage := scylla.New()
 err := storage.Connect(ctx, "localhost:9042,192.168.1.2:9042/mykeyspace?consistency=quorum&timeout=10s")
 ```
 
+### Amazon S3
+
+```go
+import "github.com/jadedragon942/ddao/storage/s3"
+
+storage := s3.New()
+// AWS S3
+err := storage.Connect(ctx, "s3://my-bucket/ddao-data?region=us-east-1")
+// MinIO (S3-compatible)
+err := storage.Connect(ctx, "s3://my-bucket/ddao-data?region=us-east-1&endpoint=http://localhost:9000")
+```
+
 ## 🔧 Advanced Features
 
 ### Working with Objects
@@ -584,15 +600,15 @@ DDAO implements database-specific UPSERT (insert-or-update) operations:
 
 DDAO automatically maps generic types to database-specific types:
 
-| Generic Type | SQLite | PostgreSQL | SQL Server | Oracle | CockroachDB | YugabyteDB | TiDB |
-|--------------|--------|------------|------------|--------|-------------|------------|------|
-| `text` | TEXT | TEXT | NVARCHAR(MAX) | CLOB | STRING | TEXT | TEXT |
-| `integer` | INTEGER | INTEGER | BIGINT | NUMBER(19) | INT8 | INTEGER | BIGINT |
-| `json` | TEXT | JSONB | NVARCHAR(MAX) | CLOB | JSONB | JSONB | JSON |
-| `datetime` | TEXT | TIMESTAMP | DATETIME2 | TIMESTAMP | TIMESTAMPTZ | TIMESTAMP | TIMESTAMP |
-| `boolean` | INTEGER | BOOLEAN | BIT | NUMBER(1) | BOOL | BOOLEAN | BOOLEAN |
-| `blob` | BLOB | BYTEA | VARBINARY(MAX) | BLOB | BYTES | BYTEA | BLOB |
-| `uuid` | TEXT | UUID | UNIQUEIDENTIFIER | VARCHAR2(36) | UUID | UUID | VARCHAR(36) |
+| Generic Type | SQLite | PostgreSQL | SQL Server | Oracle | CockroachDB | YugabyteDB | TiDB | S3 |
+|--------------|--------|------------|------------|--------|-------------|------------|------|-----|
+| `text` | TEXT | TEXT | NVARCHAR(MAX) | CLOB | STRING | TEXT | TEXT | string |
+| `integer` | INTEGER | INTEGER | BIGINT | NUMBER(19) | INT8 | INTEGER | BIGINT | number |
+| `json` | TEXT | JSONB | NVARCHAR(MAX) | CLOB | JSONB | JSONB | JSON | object |
+| `datetime` | TEXT | TIMESTAMP | DATETIME2 | TIMESTAMP | TIMESTAMPTZ | TIMESTAMP | TIMESTAMP | string |
+| `boolean` | INTEGER | BOOLEAN | BIT | NUMBER(1) | BOOL | BOOLEAN | BOOLEAN | boolean |
+| `blob` | BLOB | BYTEA | VARBINARY(MAX) | BLOB | BYTES | BYTEA | BLOB | string |
+| `uuid` | TEXT | UUID | UNIQUEIDENTIFIER | VARCHAR2(36) | UUID | UUID | VARCHAR(36) | string |
 
 ### Field Ordering Consistency
 
