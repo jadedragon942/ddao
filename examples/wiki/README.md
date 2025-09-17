@@ -127,7 +127,6 @@ This example demonstrates key DDAO features:
 
 - **Markdown Rendering**: Client-side markdown parsing with marked.js
 - **Syntax Highlighting**: Code highlighting with highlight.js
-- **Live Preview**: Real-time markdown preview while editing
 - **Responsive Design**: Mobile-friendly CSS layout
 
 ## Customization
