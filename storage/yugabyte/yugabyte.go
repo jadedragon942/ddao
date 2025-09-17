@@ -230,6 +230,16 @@ func (s *YugabyteDBStorage) Update(ctx context.Context, obj *object.Object) (boo
 	return rowsAffected > 0, nil
 }
 
+// Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior using INSERT ... ON CONFLICT DO UPDATE
+func (s *YugabyteDBStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return s.Insert(ctx, obj)
+}
+
+// UpsertTx inserts or updates an object within a transaction, delegating to InsertTx which already implements upsert behavior using INSERT ... ON CONFLICT DO UPDATE
+func (s *YugabyteDBStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return s.InsertTx(ctx, tx, obj)
+}
+
 func (s *YugabyteDBStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }

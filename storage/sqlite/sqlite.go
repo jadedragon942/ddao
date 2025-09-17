@@ -201,6 +201,11 @@ func (s *SQLiteStorage) Update(ctx context.Context, obj *object.Object) (bool, e
 	return rowsAffected > 0, nil
 }
 
+func (s *SQLiteStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	// For SQLite, Upsert is the same as Insert because Insert already uses INSERT OR REPLACE
+	return s.Insert(ctx, obj)
+}
+
 func (s *SQLiteStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }
@@ -683,4 +688,9 @@ func (s *SQLiteStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, i
 		return false, err
 	}
 	return n > 0, nil
+}
+
+func (s *SQLiteStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	// For SQLite, UpsertTx is the same as InsertTx because InsertTx already uses INSERT OR REPLACE
+	return s.InsertTx(ctx, tx, obj)
 }

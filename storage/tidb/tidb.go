@@ -219,6 +219,16 @@ func (s *TiDBStorage) Update(ctx context.Context, obj *object.Object) (bool, err
 	return rowsAffected > 0, nil
 }
 
+// Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior using REPLACE INTO
+func (s *TiDBStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return s.Insert(ctx, obj)
+}
+
+// UpsertTx inserts or updates an object within a transaction, delegating to InsertTx which already implements upsert behavior using REPLACE INTO
+func (s *TiDBStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return s.InsertTx(ctx, tx, obj)
+}
+
 func (s *TiDBStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }

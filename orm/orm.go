@@ -29,6 +29,10 @@ func (orm *ORM) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, e
 	return orm.Storage.Insert(ctx, obj)
 }
 
+func (orm *ORM) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return orm.Storage.Upsert(ctx, obj)
+}
+
 func (orm *ORM) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return orm.Storage.FindByKey(ctx, tblName, "id", id)
 }
@@ -68,6 +72,10 @@ func (orm *ORM) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([
 
 func (orm *ORM) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Object) (bool, error) {
 	return orm.Storage.UpdateTx(ctx, tx, obj)
+}
+
+func (orm *ORM) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return orm.Storage.UpsertTx(ctx, tx, obj)
 }
 
 func (orm *ORM) FindByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (*object.Object, error) {

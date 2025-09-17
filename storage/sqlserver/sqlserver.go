@@ -268,6 +268,16 @@ func (s *SQLServerStorage) Update(ctx context.Context, obj *object.Object) (bool
 	return rowsAffected > 0, nil
 }
 
+// Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior using MERGE statement
+func (s *SQLServerStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return s.Insert(ctx, obj)
+}
+
+// UpsertTx inserts or updates an object within a transaction, delegating to InsertTx which already implements upsert behavior using MERGE statement
+func (s *SQLServerStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return s.InsertTx(ctx, tx, obj)
+}
+
 func (s *SQLServerStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }

@@ -239,6 +239,11 @@ func (s *PostgreSQLStorage) Update(ctx context.Context, obj *object.Object) (boo
 	return rowsAffected > 0, nil
 }
 
+func (s *PostgreSQLStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	// For PostgreSQL, Upsert is the same as Insert because Insert already uses ON CONFLICT DO UPDATE
+	return s.Insert(ctx, obj)
+}
+
 func (s *PostgreSQLStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }
@@ -690,4 +695,9 @@ func (s *PostgreSQLStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblNam
 		return false, err
 	}
 	return n > 0, nil
+}
+
+func (s *PostgreSQLStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	// For PostgreSQL, UpsertTx is the same as InsertTx because InsertTx already uses ON CONFLICT DO UPDATE
+	return s.InsertTx(ctx, tx, obj)
 }

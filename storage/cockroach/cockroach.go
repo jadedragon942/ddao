@@ -221,6 +221,16 @@ func (s *CockroachDBStorage) Update(ctx context.Context, obj *object.Object) (bo
 	return rowsAffected > 0, nil
 }
 
+// Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior using UPSERT INTO
+func (s *CockroachDBStorage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return s.Insert(ctx, obj)
+}
+
+// UpsertTx inserts or updates an object within a transaction, delegating to InsertTx which already implements upsert behavior using UPSERT INTO
+func (s *CockroachDBStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return s.InsertTx(ctx, tx, obj)
+}
+
 func (s *CockroachDBStorage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	return s.FindByKey(ctx, tblName, "id", id)
 }

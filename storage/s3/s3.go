@@ -326,6 +326,16 @@ func (s *S3Storage) Update(ctx context.Context, obj *object.Object) (bool, error
 	return true, nil
 }
 
+// Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior
+func (s *S3Storage) Upsert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
+	return s.Insert(ctx, obj)
+}
+
+// UpsertTx inserts or updates an object within a transaction, delegating to InsertTx which already implements upsert behavior
+func (s *S3Storage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return s.InsertTx(ctx, tx, obj)
+}
+
 // FindByID retrieves an object by its ID
 func (s *S3Storage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
 	s.mu.Lock()

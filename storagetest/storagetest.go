@@ -2,6 +2,7 @@ package storagetest
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/jadedragon942/ddao/object"
@@ -293,6 +294,181 @@ func CRUDTest(t *testing.T, storage storage.Storage) {
 	}
 	if name != "David Wilson Jr" {
 		t.Errorf("expected upserted name 'David Wilson Jr', got '%s'", name)
+	}
+
+	// Clean up
+	err = storage.ResetConnection(ctx)
+	if err != nil {
+		t.Errorf("failed to reset connection: %v", err)
+	}
+}
+
+// UpsertTest performs explicit testing of Upsert functionality
+func UpsertTest(t *testing.T, storage storage.Storage) {
+	ctx := context.Background()
+
+	// Create tables
+	err := storage.CreateTables(ctx, schema.GetTestSchema())
+	if err != nil {
+		t.Fatalf("failed to create tables: %v", err)
+	}
+
+	// Test 1: Upsert a new object (should act like insert)
+	newObj := &object.Object{
+		TableName: "people",
+		ID:        "upsert_user1",
+		Fields: map[string]any{
+			"name":     "Upsert Test User",
+			"metadata": `{"operation": "insert"}`,
+		},
+	}
+
+	data, created, err := storage.Upsert(ctx, newObj)
+	if err != nil {
+		t.Fatalf("failed to upsert new object: %v", err)
+	}
+	if !created {
+		t.Error("expected upsert to create new object")
+	}
+	if data == nil {
+		t.Error("expected non-nil data from upsert")
+	}
+
+	// Verify the object was created
+	foundObj, err := storage.FindByID(ctx, "people", "upsert_user1")
+	if err != nil {
+		t.Fatalf("failed to find upserted object: %v", err)
+	}
+	if foundObj == nil {
+		t.Fatal("upserted object not found")
+	}
+
+	name, ok := foundObj.GetString("name")
+	if !ok || name != "Upsert Test User" {
+		t.Errorf("expected name 'Upsert Test User', got '%s'", name)
+	}
+
+	// Test 2: Upsert existing object (should act like update)
+	updateObj := &object.Object{
+		TableName: "people",
+		ID:        "upsert_user1",
+		Fields: map[string]any{
+			"name":     "Updated Upsert User",
+			"metadata": `{"operation": "update"}`,
+		},
+	}
+
+	data, created, err = storage.Upsert(ctx, updateObj)
+	if err != nil {
+		t.Fatalf("failed to upsert existing object: %v", err)
+	}
+	// Note: created flag behavior may vary by database implementation
+	// Some databases may return true even for updates in upsert operations
+
+	// Verify the object was updated
+	foundObj, err = storage.FindByID(ctx, "people", "upsert_user1")
+	if err != nil {
+		t.Fatalf("failed to find updated object: %v", err)
+	}
+	if foundObj == nil {
+		t.Fatal("updated object not found")
+	}
+
+	name, ok = foundObj.GetString("name")
+	if !ok || name != "Updated Upsert User" {
+		t.Errorf("expected updated name 'Updated Upsert User', got '%s'", name)
+	}
+
+	metadata, ok := foundObj.GetString("metadata")
+	if !ok || !strings.Contains(metadata, "update") {
+		t.Errorf("expected metadata to contain 'update', got '%s'", metadata)
+	}
+
+	// Test 3: UpsertTx with new object
+	tx, err := storage.BeginTx(ctx)
+	if err != nil {
+		t.Fatalf("failed to begin transaction: %v", err)
+	}
+
+	txObj := &object.Object{
+		TableName: "people",
+		ID:        "upsert_tx_user",
+		Fields: map[string]any{
+			"name":     "Transaction Upsert User",
+			"metadata": `{"operation": "tx_insert"}`,
+		},
+	}
+
+	data, created, err = storage.UpsertTx(ctx, tx, txObj)
+	if err != nil {
+		storage.RollbackTx(tx)
+		t.Fatalf("failed to upsert in transaction: %v", err)
+	}
+
+	// Commit transaction
+	err = storage.CommitTx(tx)
+	if err != nil {
+		t.Fatalf("failed to commit transaction: %v", err)
+	}
+
+	// Verify transaction upsert
+	foundObj, err = storage.FindByID(ctx, "people", "upsert_tx_user")
+	if err != nil {
+		t.Fatalf("failed to find transaction upserted object: %v", err)
+	}
+	if foundObj == nil {
+		t.Fatal("transaction upserted object not found")
+	}
+
+	name, ok = foundObj.GetString("name")
+	if !ok || name != "Transaction Upsert User" {
+		t.Errorf("expected name 'Transaction Upsert User', got '%s'", name)
+	}
+
+	// Test 4: UpsertTx with existing object (update)
+	tx, err = storage.BeginTx(ctx)
+	if err != nil {
+		t.Fatalf("failed to begin transaction for update: %v", err)
+	}
+
+	txUpdateObj := &object.Object{
+		TableName: "people",
+		ID:        "upsert_tx_user",
+		Fields: map[string]any{
+			"name":     "Updated Transaction User",
+			"metadata": `{"operation": "tx_update"}`,
+		},
+	}
+
+	data, created, err = storage.UpsertTx(ctx, tx, txUpdateObj)
+	if err != nil {
+		storage.RollbackTx(tx)
+		t.Fatalf("failed to upsert existing object in transaction: %v", err)
+	}
+
+	// Commit transaction
+	err = storage.CommitTx(tx)
+	if err != nil {
+		t.Fatalf("failed to commit update transaction: %v", err)
+	}
+
+	// Verify transaction upsert update
+	foundObj, err = storage.FindByID(ctx, "people", "upsert_tx_user")
+	if err != nil {
+		t.Fatalf("failed to find updated transaction object: %v", err)
+	}
+	if foundObj == nil {
+		t.Fatal("updated transaction object not found")
+	}
+
+	name, ok = foundObj.GetString("name")
+	if !ok || name != "Updated Transaction User" {
+		t.Errorf("expected updated name 'Updated Transaction User', got '%s'", name)
+	}
+
+	metadata, ok = foundObj.GetString("metadata")
+	if !ok || !strings.Contains(metadata, "tx_update") {
+		t.Errorf("expected metadata to contain 'tx_update', got '%s'", metadata)
 	}
 
 	// Clean up
