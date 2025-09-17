@@ -1,0 +1,118 @@
+version: '3.8'
+
+services:
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: ddao-scylla
+    hostname: scylla-node1
+    ports:
+      - "9042:9042"   # CQL native transport port
+      - "7000:7000"   # Inter-node communication
+      - "7001:7001"   # TLS inter-node communication
+      - "9160:9160"   # Thrift port (legacy)
+      - "10000:10000" # REST API
+    environment:
+      - SCYLLA_CLUSTER_NAME=DDAO Cluster
+      - SCYLLA_ENDPOINT_SNITCH=SimpleSnitch
+      - SCYLLA_DC=datacenter1
+      - SCYLLA_RACK=rack1
+    command: >
+      --seeds=scylla-node1
+      --smp=1
+      --memory=2G
+      --overprovisioned=1
+      --api-address=0.0.0.0
+      --broadcast-address=scylla-node1
+      --listen-address=0.0.0.0
+      --broadcast-rpc-address=scylla-node1
+      --rpc-address=0.0.0.0
+      --authenticator=AllowAllAuthenticator
+      --authorizer=AllowAllAuthorizer
+    volumes:
+      - scylla_data:/var/lib/scylla/data
+      - scylla_commitlog:/var/lib/scylla/commitlog
+      - scylla_hints:/var/lib/scylla/hints
+      - scylla_view_hints:/var/lib/scylla/view_hints
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "DESCRIBE KEYSPACES"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - ddao-network
+
+  # Optional: DDAO application service
+  # Uncomment and modify as needed for your application
+  # ddao-app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.app
+  #   container_name: ddao-app
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - SCYLLA_HOST=scylla:9042
+  #     - SCYLLA_KEYSPACE=ddao_example
+  #   depends_on:
+  #     scylla:
+  #       condition: service_healthy
+  #   volumes:
+  #     - ./examples:/app/examples
+  #   networks:
+  #     - ddao-network
+
+  # ScyllaDB Manager (optional) - for monitoring and management
+  scylla-manager:
+    image: scylladb/scylla-manager:3.2
+    container_name: ddao-scylla-manager
+    ports:
+      - "56080:56080"  # Scylla Manager API
+      - "56090:56090"  # Scylla Manager Prometheus metrics
+    environment:
+      - SCYLLA_MANAGER_DB_HOST=scylla
+    depends_on:
+      scylla:
+        condition: service_healthy
+    networks:
+      - ddao-network
+    profiles:
+      - monitoring
+
+  # ScyllaDB Monitoring (optional) - Grafana + Prometheus
+  scylla-monitoring:
+    image: scylladb/scylla-monitoring:4.6
+    container_name: ddao-scylla-monitoring
+    ports:
+      - "3000:3000"   # Grafana
+      - "9090:9090"   # Prometheus
+    environment:
+      - SCYLLA_NODES=scylla:9042
+    depends_on:
+      scylla:
+        condition: service_healthy
+    volumes:
+      - monitoring_data:/prometheus
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ddao-network
+    profiles:
+      - monitoring
+
+volumes:
+  scylla_data:
+    driver: local
+  scylla_commitlog:
+    driver: local
+  scylla_hints:
+    driver: local
+  scylla_view_hints:
+    driver: local
+  monitoring_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  ddao-network:
+    driver: bridge

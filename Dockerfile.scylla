@@ -1,0 +1,33 @@
+# Dockerfile for ScyllaDB
+FROM scylladb/scylla:5.2
+
+# Set environment variables
+ENV SCYLLA_CLUSTER_NAME="DDAO Cluster"
+ENV SCYLLA_ENDPOINT_SNITCH="SimpleSnitch"
+ENV SCYLLA_DC="datacenter1"
+ENV SCYLLA_RACK="rack1"
+
+# Expose ScyllaDB ports
+# 9042: CQL native transport port
+# 7000: Inter-node communication
+# 7001: TLS inter-node communication
+# 9160: Thrift port (legacy)
+# 10000: REST API
+EXPOSE 9042 7000 7001 9160 10000
+
+# Create directories for ScyllaDB data and configuration
+RUN mkdir -p /var/lib/scylla/data \
+    && mkdir -p /var/lib/scylla/commitlog \
+    && mkdir -p /var/lib/scylla/hints \
+    && mkdir -p /var/lib/scylla/view_hints \
+    && mkdir -p /etc/scylla
+
+# Copy custom configuration if exists
+# COPY scylla.yaml /etc/scylla/scylla.yaml
+
+# Set up health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD cqlsh -e "DESCRIBE KEYSPACES" || exit 1
+
+# Default command - start ScyllaDB in single-node mode for development
+CMD ["--seeds=127.0.0.1", "--smp=1", "--memory=2G", "--overprovisioned=1", "--api-address=0.0.0.0"]

@@ -10,10 +10,15 @@ tidb:
 	# MySQL/TiDB (with database)
 	docker-compose -f docker-compose.mysql.yml up ddao-mysql
 
-roach:
+cockroachdb:
 	# CockroachDB (with database)
 	docker-compose -f docker-compose.cockroach.yml up ddao-cockroach
 
-yuga:
+yugabyte:
 	# YugabyteDB (with database)
 	docker-compose -f docker-compose.yugabyte.yml up ddao-yugabyte
+
+scylla:
+	# ScyllaDB (with database)
+	docker-compose -f docker-compose.scylla.yml up ddao-scylla
+
