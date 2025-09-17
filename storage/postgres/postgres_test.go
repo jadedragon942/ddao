@@ -61,3 +61,37 @@ func TestPostgreSQLLocal(t *testing.T) {
 	storagetest.StorageTest(t, storage)
 	storagetest.CRUDTest(t, storage)
 }
+
+func TestPostgreSQLTransactions(t *testing.T) {
+	connStr := os.Getenv("POSTGRES_TEST_URL")
+	if connStr == "" {
+		t.Skip("POSTGRES_TEST_URL not set, skipping PostgreSQL transaction tests")
+	}
+
+	storage := New()
+	ctx := context.Background()
+	err := storage.Connect(ctx, connStr)
+	if err != nil {
+		t.Fatalf("Failed to connect to PostgreSQL storage: %v", err)
+	}
+	defer storage.ResetConnection(ctx)
+
+	storagetest.TransactionTest(t, storage)
+}
+
+func TestPostgreSQLLocalTransactions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping local PostgreSQL transaction test in short mode")
+	}
+
+	connStr := "postgres://postgres:testpass@localhost:5432/testdb?sslmode=disable"
+	storage := New()
+	ctx := context.Background()
+	err := storage.Connect(ctx, connStr)
+	if err != nil {
+		t.Skipf("Failed to connect to local PostgreSQL (is it running?): %v", err)
+	}
+	defer storage.ResetConnection(ctx)
+
+	storagetest.TransactionTest(t, storage)
+}

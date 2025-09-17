@@ -30,3 +30,15 @@ func TestSQLiteCRUD(t *testing.T) {
 
 	storagetest.CRUDTest(t, storage)
 }
+
+func TestSQLiteTransactions(t *testing.T) {
+	storage := New()
+	ctx := context.Background()
+	err := storage.Connect(ctx, ":memory:")
+	if err != nil {
+		t.Fatalf("Failed to connect to SQLite storage: %v", err)
+	}
+	defer storage.ResetConnection(ctx)
+
+	storagetest.TransactionTest(t, storage)
+}

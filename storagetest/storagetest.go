@@ -301,3 +301,427 @@ func CRUDTest(t *testing.T, storage storage.Storage) {
 		t.Errorf("failed to reset connection: %v", err)
 	}
 }
+
+// TransactionTest performs comprehensive transaction testing for a storage.Storage backend
+func TransactionTest(t *testing.T, storage storage.Storage) {
+	ctx := context.Background()
+
+	// Create tables
+	err := storage.CreateTables(ctx, schema.GetTestSchema())
+	if err != nil {
+		t.Fatalf("failed to create tables: %v", err)
+	}
+
+	// Test 1: Basic transaction operations - commit
+	t.Run("BasicTransactionCommit", func(t *testing.T) {
+		tx, err := storage.BeginTx(ctx)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user1",
+			Fields: map[string]any{
+				"name":     "Transaction User 1",
+				"metadata": `{"test": "commit"}`,
+			},
+		}
+
+		_, created, err := storage.InsertTx(ctx, tx, obj)
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to insert in transaction: %v", err)
+		}
+		if !created {
+			storage.RollbackTx(tx)
+			t.Fatal("object was not created in transaction")
+		}
+
+		// Object may or may not be visible outside transaction depending on database implementation
+		// SQLite in-memory may behave differently than other databases
+		foundObj, err := storage.FindByID(ctx, "people", "tx_user1")
+		if err != nil {
+			// This is expected for some database implementations
+			t.Logf("Expected behavior: object not visible outside transaction: %v", err)
+		} else if foundObj != nil {
+			t.Logf("Note: object visible outside uncommitted transaction (database-specific behavior)")
+		}
+
+		// Object should be visible within transaction
+		foundObjTx, err := storage.FindByIDTx(ctx, tx, "people", "tx_user1")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to find object in transaction: %v", err)
+		}
+		if foundObjTx == nil {
+			storage.RollbackTx(tx)
+			t.Fatal("object not found in transaction")
+		}
+
+		// Commit transaction
+		err = storage.CommitTx(tx)
+		if err != nil {
+			t.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		// Object should now be visible outside transaction
+		foundObj, err = storage.FindByID(ctx, "people", "tx_user1")
+		if err != nil {
+			t.Fatalf("failed to find committed object: %v", err)
+		}
+		if foundObj == nil {
+			t.Fatal("committed object not found")
+		}
+		if foundObj.ID != "tx_user1" {
+			t.Errorf("expected ID 'tx_user1', got '%s'", foundObj.ID)
+		}
+	})
+
+	// Test 2: Transaction rollback
+	t.Run("TransactionRollback", func(t *testing.T) {
+		tx, err := storage.BeginTx(ctx)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user2",
+			Fields: map[string]any{
+				"name":     "Transaction User 2",
+				"metadata": `{"test": "rollback"}`,
+			},
+		}
+
+		_, created, err := storage.InsertTx(ctx, tx, obj)
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to insert in transaction: %v", err)
+		}
+		if !created {
+			storage.RollbackTx(tx)
+			t.Fatal("object was not created in transaction")
+		}
+
+		// Object should be visible within transaction
+		foundObjTx, err := storage.FindByIDTx(ctx, tx, "people", "tx_user2")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to find object in transaction: %v", err)
+		}
+		if foundObjTx == nil {
+			storage.RollbackTx(tx)
+			t.Fatal("object not found in transaction")
+		}
+
+		// Rollback transaction
+		err = storage.RollbackTx(tx)
+		if err != nil {
+			t.Fatalf("failed to rollback transaction: %v", err)
+		}
+
+		// Object should not be visible after rollback
+		foundObj, err := storage.FindByID(ctx, "people", "tx_user2")
+		if err != nil {
+			t.Fatalf("unexpected error finding rolled back object: %v", err)
+		}
+		if foundObj != nil {
+			t.Error("rolled back object should not be visible")
+		}
+	})
+
+	// Test 3: Transaction update operations
+	t.Run("TransactionUpdate", func(t *testing.T) {
+		// First insert an object normally
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user3",
+			Fields: map[string]any{
+				"name":     "Transaction User 3",
+				"metadata": `{"test": "original"}`,
+			},
+		}
+
+		_, created, err := storage.Insert(ctx, obj)
+		if err != nil {
+			t.Fatalf("failed to insert initial object: %v", err)
+		}
+		if !created {
+			t.Fatal("initial object was not created")
+		}
+
+		// Start transaction and update
+		tx, err := storage.BeginTx(ctx)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+
+		updateObj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user3",
+			Fields: map[string]any{
+				"name":     "Transaction User 3 Updated",
+				"metadata": `{"test": "updated"}`,
+			},
+		}
+
+		updated, err := storage.UpdateTx(ctx, tx, updateObj)
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to update in transaction: %v", err)
+		}
+		if !updated {
+			storage.RollbackTx(tx)
+			t.Fatal("object was not updated in transaction")
+		}
+
+		// Verify update within transaction
+		foundObjTx, err := storage.FindByIDTx(ctx, tx, "people", "tx_user3")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to find updated object in transaction: %v", err)
+		}
+		if foundObjTx == nil {
+			storage.RollbackTx(tx)
+			t.Fatal("updated object not found in transaction")
+		}
+
+		name, ok := foundObjTx.GetString("name")
+		if !ok {
+			storage.RollbackTx(tx)
+			t.Fatal("failed to get name field")
+		}
+		if name != "Transaction User 3 Updated" {
+			storage.RollbackTx(tx)
+			t.Errorf("expected updated name 'Transaction User 3 Updated', got '%s'", name)
+		}
+
+		// Original object may still be visible outside transaction depending on database implementation
+		foundObj, err := storage.FindByID(ctx, "people", "tx_user3")
+		if err != nil {
+			t.Logf("Expected behavior: original object not accessible outside transaction: %v", err)
+		} else if foundObj != nil {
+			origName, ok := foundObj.GetString("name")
+			if ok && origName == "Transaction User 3" {
+				t.Logf("Note: original object still visible outside transaction (database-specific behavior)")
+			}
+		}
+
+		// Commit transaction
+		err = storage.CommitTx(tx)
+		if err != nil {
+			t.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		// Verify update is now visible outside transaction
+		foundObj, err = storage.FindByID(ctx, "people", "tx_user3")
+		if err != nil {
+			t.Fatalf("failed to find committed updated object: %v", err)
+		}
+		if foundObj == nil {
+			t.Fatal("committed updated object not found")
+		}
+
+		name, ok = foundObj.GetString("name")
+		if !ok {
+			t.Fatal("failed to get committed name field")
+		}
+		if name != "Transaction User 3 Updated" {
+			t.Errorf("expected committed name 'Transaction User 3 Updated', got '%s'", name)
+		}
+	})
+
+	// Test 4: Transaction delete operations
+	t.Run("TransactionDelete", func(t *testing.T) {
+		// First insert an object normally
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user4",
+			Fields: map[string]any{
+				"name":     "Transaction User 4",
+				"metadata": `{"test": "delete"}`,
+			},
+		}
+
+		_, created, err := storage.Insert(ctx, obj)
+		if err != nil {
+			t.Fatalf("failed to insert initial object: %v", err)
+		}
+		if !created {
+			t.Fatal("initial object was not created")
+		}
+
+		// Start transaction and delete
+		tx, err := storage.BeginTx(ctx)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+
+		deleted, err := storage.DeleteByIDTx(ctx, tx, "people", "tx_user4")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to delete in transaction: %v", err)
+		}
+		if !deleted {
+			storage.RollbackTx(tx)
+			t.Fatal("object was not deleted in transaction")
+		}
+
+		// Object should not be visible within transaction
+		foundObjTx, err := storage.FindByIDTx(ctx, tx, "people", "tx_user4")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("unexpected error finding deleted object in transaction: %v", err)
+		}
+		if foundObjTx != nil {
+			storage.RollbackTx(tx)
+			t.Error("deleted object should not be visible in transaction")
+		}
+
+		// Object may still be visible outside transaction depending on database implementation
+		foundObj, err := storage.FindByID(ctx, "people", "tx_user4")
+		if err != nil {
+			t.Logf("Expected behavior: object not accessible outside transaction: %v", err)
+		} else if foundObj == nil {
+			t.Logf("Note: object already deleted outside transaction (database-specific behavior)")
+		} else {
+			t.Logf("Note: original object still visible outside transaction (database-specific behavior)")
+		}
+
+		// Commit transaction
+		err = storage.CommitTx(tx)
+		if err != nil {
+			t.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		// Object should now be deleted outside transaction
+		foundObj, err = storage.FindByID(ctx, "people", "tx_user4")
+		if err != nil {
+			t.Fatalf("unexpected error finding deleted object: %v", err)
+		}
+		if foundObj != nil {
+			t.Error("committed deleted object should not be visible")
+		}
+	})
+
+	// Test 5: Transaction with FindByKey operations
+	t.Run("TransactionFindByKey", func(t *testing.T) {
+		tx, err := storage.BeginTx(ctx)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "tx_user5",
+			Fields: map[string]any{
+				"name":     "Transaction User 5",
+				"metadata": `{"test": "findbykey"}`,
+			},
+		}
+
+		_, created, err := storage.InsertTx(ctx, tx, obj)
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to insert in transaction: %v", err)
+		}
+		if !created {
+			storage.RollbackTx(tx)
+			t.Fatal("object was not created in transaction")
+		}
+
+		// Find by key within transaction
+		foundObjTx, err := storage.FindByKeyTx(ctx, tx, "people", "name", "Transaction User 5")
+		if err != nil {
+			storage.RollbackTx(tx)
+			t.Fatalf("failed to find object by key in transaction: %v", err)
+		}
+		if foundObjTx == nil {
+			storage.RollbackTx(tx)
+			t.Fatal("object not found by key in transaction")
+		}
+		if foundObjTx.ID != "tx_user5" {
+			storage.RollbackTx(tx)
+			t.Errorf("expected ID 'tx_user5', got '%s'", foundObjTx.ID)
+		}
+
+		// Commit transaction
+		err = storage.CommitTx(tx)
+		if err != nil {
+			t.Fatalf("failed to commit transaction: %v", err)
+		}
+
+		// Find by key outside transaction
+		foundObj, err := storage.FindByKey(ctx, "people", "name", "Transaction User 5")
+		if err != nil {
+			t.Fatalf("failed to find committed object by key: %v", err)
+		}
+		if foundObj == nil {
+			t.Fatal("committed object not found by key")
+		}
+		if foundObj.ID != "tx_user5" {
+			t.Errorf("expected committed ID 'tx_user5', got '%s'", foundObj.ID)
+		}
+	})
+
+	// Test 6: Error handling - nil transaction
+	t.Run("NilTransactionHandling", func(t *testing.T) {
+		obj := &object.Object{
+			TableName: "people",
+			ID:        "nil_tx_test",
+			Fields: map[string]any{
+				"name":     "Nil TX Test",
+				"metadata": `{"test": "nil"}`,
+			},
+		}
+
+		// Test InsertTx with nil transaction
+		_, _, err := storage.InsertTx(ctx, nil, obj)
+		if err == nil {
+			t.Error("expected error when using nil transaction for InsertTx")
+		}
+
+		// Test UpdateTx with nil transaction
+		_, err = storage.UpdateTx(ctx, nil, obj)
+		if err == nil {
+			t.Error("expected error when using nil transaction for UpdateTx")
+		}
+
+		// Test FindByIDTx with nil transaction
+		_, err = storage.FindByIDTx(ctx, nil, "people", "nil_tx_test")
+		if err == nil {
+			t.Error("expected error when using nil transaction for FindByIDTx")
+		}
+
+		// Test FindByKeyTx with nil transaction
+		_, err = storage.FindByKeyTx(ctx, nil, "people", "name", "Nil TX Test")
+		if err == nil {
+			t.Error("expected error when using nil transaction for FindByKeyTx")
+		}
+
+		// Test DeleteByIDTx with nil transaction
+		_, err = storage.DeleteByIDTx(ctx, nil, "people", "nil_tx_test")
+		if err == nil {
+			t.Error("expected error when using nil transaction for DeleteByIDTx")
+		}
+
+		// Test CommitTx with nil transaction
+		err = storage.CommitTx(nil)
+		if err == nil {
+			t.Error("expected error when committing nil transaction")
+		}
+
+		// Test RollbackTx with nil transaction
+		err = storage.RollbackTx(nil)
+		if err == nil {
+			t.Error("expected error when rolling back nil transaction")
+		}
+	})
+
+	// Clean up
+	err = storage.ResetConnection(ctx)
+	if err != nil {
+		t.Errorf("failed to reset connection: %v", err)
+	}
+}

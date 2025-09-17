@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
@@ -46,4 +47,37 @@ func (orm *ORM) ResetConnection(ctx context.Context) error {
 
 func (orm *ORM) Connect(ctx context.Context, connStr string) error {
 	return orm.Storage.Connect(ctx, connStr)
+}
+
+// Transaction support methods
+func (orm *ORM) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	return orm.Storage.BeginTx(ctx)
+}
+
+func (orm *ORM) CommitTx(tx *sql.Tx) error {
+	return orm.Storage.CommitTx(tx)
+}
+
+func (orm *ORM) RollbackTx(tx *sql.Tx) error {
+	return orm.Storage.RollbackTx(tx)
+}
+
+func (orm *ORM) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object) ([]byte, bool, error) {
+	return orm.Storage.InsertTx(ctx, tx, obj)
+}
+
+func (orm *ORM) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Object) (bool, error) {
+	return orm.Storage.UpdateTx(ctx, tx, obj)
+}
+
+func (orm *ORM) FindByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (*object.Object, error) {
+	return orm.Storage.FindByIDTx(ctx, tx, tblName, id)
+}
+
+func (orm *ORM) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key, value string) (*object.Object, error) {
+	return orm.Storage.FindByKeyTx(ctx, tx, tblName, key, value)
+}
+
+func (orm *ORM) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (bool, error) {
+	return orm.Storage.DeleteByIDTx(ctx, tx, tblName, id)
 }
