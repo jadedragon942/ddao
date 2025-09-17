@@ -13,6 +13,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 - **Type-Safe Operations**: Built-in type conversion and validation
 - **UPSERT Support**: Atomic insert-or-update operations
 - **JSON Support**: Native JSON field handling for modern applications
+- **Transaction Support**: Full transaction support with transaction-aware CRUD operations
 - **Comprehensive Testing**: Full test suite with CRUD operation coverage
 - **Connection Management**: Proper connection lifecycle management
 
@@ -440,6 +441,16 @@ type Storage interface {
     FindByKey(ctx context.Context, tblName, key, value string) (*Object, error)
     DeleteByID(ctx context.Context, tblName, id string) (bool, error)
     ResetConnection(ctx context.Context) error
+
+    // Transaction support
+    BeginTx(ctx context.Context) (*sql.Tx, error)
+    CommitTx(tx *sql.Tx) error
+    RollbackTx(tx *sql.Tx) error
+    InsertTx(ctx context.Context, tx *sql.Tx, obj *Object) ([]byte, bool, error)
+    UpdateTx(ctx context.Context, tx *sql.Tx, obj *Object) (bool, error)
+    FindByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (*Object, error)
+    FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key, value string) (*Object, error)
+    DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (bool, error)
 }
 ```
 
@@ -467,6 +478,156 @@ DDAO automatically maps generic types to database-specific types:
 ### Field Ordering Consistency
 
 DDAO ensures consistent field ordering across operations to prevent data corruption during read/write operations. This is particularly important when dealing with dynamic schemas where field order can vary.
+
+## 💳 Transaction Support
+
+DDAO provides full transaction support with transaction-aware versions of all CRUD operations. This allows you to perform multiple operations atomically within a single database transaction.
+
+### Transaction Methods
+
+All storage implementations provide these transaction methods:
+
+- `BeginTx(ctx)` - Start a new transaction
+- `CommitTx(tx)` - Commit the transaction
+- `RollbackTx(tx)` - Rollback the transaction
+- `InsertTx(ctx, tx, obj)` - Insert within a transaction
+- `UpdateTx(ctx, tx, obj)` - Update within a transaction
+- `FindByIDTx(ctx, tx, tblName, id)` - Find by ID within a transaction
+- `FindByKeyTx(ctx, tx, tblName, key, value)` - Find by key within a transaction
+- `DeleteByIDTx(ctx, tx, tblName, id)` - Delete by ID within a transaction
+
+### Transaction Usage Example
+
+```go
+func performTransactionalOperations(ctx context.Context, orm *orm.ORM) error {
+    // Begin a new transaction
+    tx, err := orm.BeginTx(ctx)
+    if err != nil {
+        return fmt.Errorf("failed to begin transaction: %w", err)
+    }
+
+    // Ensure transaction is properly handled
+    defer func() {
+        if err != nil {
+            orm.RollbackTx(tx)
+        }
+    }()
+
+    // Create first user within transaction
+    user1 := object.New()
+    user1.TableName = "users"
+    user1.ID = "user1"
+    user1.Fields = map[string]any{
+        "email":      "user1@example.com",
+        "created_at": "2024-01-01T00:00:00Z",
+    }
+
+    _, created, err := orm.InsertTx(ctx, tx, user1)
+    if err != nil {
+        return fmt.Errorf("failed to insert user1: %w", err)
+    }
+    if !created {
+        return fmt.Errorf("user1 was not created")
+    }
+
+    // Create second user within the same transaction
+    user2 := object.New()
+    user2.TableName = "users"
+    user2.ID = "user2"
+    user2.Fields = map[string]any{
+        "email":      "user2@example.com",
+        "created_at": "2024-01-01T00:00:00Z",
+    }
+
+    _, created, err = orm.InsertTx(ctx, tx, user2)
+    if err != nil {
+        return fmt.Errorf("failed to insert user2: %w", err)
+    }
+
+    // Verify both users exist within the transaction
+    foundUser1, err := orm.FindByIDTx(ctx, tx, "users", "user1")
+    if err != nil {
+        return fmt.Errorf("failed to find user1: %w", err)
+    }
+    if foundUser1 == nil {
+        return fmt.Errorf("user1 not found in transaction")
+    }
+
+    foundUser2, err := orm.FindByIDTx(ctx, tx, "users", "user2")
+    if err != nil {
+        return fmt.Errorf("failed to find user2: %w", err)
+    }
+    if foundUser2 == nil {
+        return fmt.Errorf("user2 not found in transaction")
+    }
+
+    // Update user1 within transaction
+    foundUser1.Fields["email"] = "updated_user1@example.com"
+    updated, err := orm.UpdateTx(ctx, tx, foundUser1)
+    if err != nil {
+        return fmt.Errorf("failed to update user1: %w", err)
+    }
+    if !updated {
+        return fmt.Errorf("user1 was not updated")
+    }
+
+    // Commit the transaction - all operations succeed or all fail
+    err = orm.CommitTx(tx)
+    if err != nil {
+        return fmt.Errorf("failed to commit transaction: %w", err)
+    }
+
+    log.Println("Transaction completed successfully")
+    return nil
+}
+```
+
+### Transaction Best Practices
+
+1. **Always handle errors properly**: Use defer to ensure transactions are rolled back on errors
+2. **Keep transactions short**: Long-running transactions can cause lock contention
+3. **Use appropriate isolation levels**: The default isolation level is usually sufficient
+4. **Test transaction boundaries**: Ensure your business logic properly handles transaction rollbacks
+5. **Handle deadlocks**: Be prepared to retry transactions that fail due to deadlocks
+
+### Error Handling with Transactions
+
+```go
+func safeTransactionalOperation(ctx context.Context, orm *orm.ORM) error {
+    tx, err := orm.BeginTx(ctx)
+    if err != nil {
+        return err
+    }
+
+    // Use a flag to track if we should commit or rollback
+    shouldCommit := false
+    defer func() {
+        if shouldCommit {
+            if commitErr := orm.CommitTx(tx); commitErr != nil {
+                log.Printf("Failed to commit transaction: %v", commitErr)
+            }
+        } else {
+            if rollbackErr := orm.RollbackTx(tx); rollbackErr != nil {
+                log.Printf("Failed to rollback transaction: %v", rollbackErr)
+            }
+        }
+    }()
+
+    // Perform your operations...
+    user := object.New()
+    user.TableName = "users"
+    user.ID = "safe_user"
+    user.Fields = map[string]any{"email": "safe@example.com"}
+
+    _, _, err = orm.InsertTx(ctx, tx, user)
+    if err != nil {
+        return err // Will trigger rollback via defer
+    }
+
+    // If we reach here, mark for commit
+    shouldCommit = true
+    return nil
+}
 
 ## 🔒 Best Practices
 
