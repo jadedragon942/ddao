@@ -77,6 +77,7 @@ func (s *SQLServerStorage) CreateTables(ctx context.Context, schema *schema.Sche
 
 		createTableQuery += ")"
 
+		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
 		_, err := s.db.ExecContext(ctx, createTableQuery)
@@ -217,7 +218,7 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = s.db.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -253,7 +254,7 @@ func (s *SQLServerStorage) Update(ctx context.Context, obj *object.Object) (bool
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE [%s] SET %s WHERE [id] = ?", tbl.TableName, strings.Join(setClauses, ", "))
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := s.db.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -350,7 +351,7 @@ func (s *SQLServerStorage) FindByKey(ctx context.Context, tblName, key, value st
 
 	query := fmt.Sprintf("SELECT %s FROM [%s] WHERE [%s] = ?", strings.Join(columns, ", "), tbl.TableName, key)
 
-	log.Printf("Executing query: '%s' with value: %s", query, value)
+	storage.DebugLog(query, value)
 
 	row := s.db.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -422,6 +423,7 @@ func (s *SQLServerStorage) DeleteByID(ctx context.Context, tblName, id string) (
 		return false, errors.New("not connected")
 	}
 	query := fmt.Sprintf(`DELETE FROM [%s] WHERE [id] = ?`, tblName)
+	storage.DebugLog(query, id)
 	res, err := s.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
@@ -561,7 +563,7 @@ func (s *SQLServerStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	log.Printf("Executing transaction query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = tx.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -597,7 +599,7 @@ func (s *SQLServerStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE [%s] SET %s WHERE [id] = ?", tbl.TableName, strings.Join(setClauses, ", "))
-	log.Printf("Executing transaction query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := tx.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -687,7 +689,7 @@ func (s *SQLServerStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName,
 
 	query := fmt.Sprintf("SELECT %s FROM [%s] WHERE [%s] = ?", strings.Join(columns, ", "), tbl.TableName, key)
 
-	log.Printf("Executing transaction query: '%s' with value: %s", query, value)
+	storage.DebugLog(query, value)
 
 	row := tx.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -759,6 +761,7 @@ func (s *SQLServerStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName
 		return false, errors.New("transaction is nil")
 	}
 	query := fmt.Sprintf(`DELETE FROM [%s] WHERE [id] = ?`, tblName)
+	storage.DebugLog(query, id)
 	res, err := tx.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err

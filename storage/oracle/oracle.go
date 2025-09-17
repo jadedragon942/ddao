@@ -50,6 +50,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 		// Check if table exists
 		var count int
 		checkQuery := "SELECT COUNT(*) FROM user_tables WHERE table_name = UPPER(?)"
+		storage.DebugLog(checkQuery, table.TableName)
 		err := s.db.QueryRowContext(ctx, checkQuery, table.TableName).Scan(&count)
 		if err != nil {
 			return fmt.Errorf("failed to check if table exists: %w", err)
@@ -85,6 +86,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 
 		createTableQuery += ")"
 
+		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
 		_, err = s.db.ExecContext(ctx, createTableQuery)
@@ -98,6 +100,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 				constraintName := fmt.Sprintf("UK_%s_%s", strings.ToUpper(table.TableName), strings.ToUpper(field.Name))
 				uniqueQuery := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)",
 					strings.ToUpper(table.TableName), constraintName, strings.ToUpper(field.Name))
+				storage.DebugLog(uniqueQuery)
 				_, err = s.db.ExecContext(ctx, uniqueQuery)
 				if err != nil {
 					log.Printf("Warning: failed to create unique constraint for %s.%s: %v", table.TableName, field.Name, err)
@@ -258,7 +261,7 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = s.db.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -311,7 +314,7 @@ func (s *OracleStorage) Update(ctx context.Context, obj *object.Object) (bool, e
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE ID = :%d", strings.ToUpper(tbl.TableName), strings.Join(setClauses, ", "), paramIndex)
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := s.db.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -408,7 +411,7 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = :1", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), strings.ToUpper(key))
 
-	log.Printf("Executing query: '%s' with value: %s", query, value)
+	storage.DebugLog(query, value)
 
 	row := s.db.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -482,6 +485,7 @@ func (s *OracleStorage) DeleteByID(ctx context.Context, tblName, id string) (boo
 		return false, errors.New("not connected")
 	}
 	query := fmt.Sprintf("DELETE FROM %s WHERE ID = :1", strings.ToUpper(tblName))
+	storage.DebugLog(query, id)
 	res, err := s.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
@@ -641,7 +645,7 @@ func (s *OracleStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	log.Printf("Executing transaction query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = tx.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -694,7 +698,7 @@ func (s *OracleStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE ID = :%d", strings.ToUpper(tbl.TableName), strings.Join(setClauses, ", "), paramIndex)
-	log.Printf("Executing transaction query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := tx.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -784,7 +788,7 @@ func (s *OracleStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, ke
 
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = :1", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), strings.ToUpper(key))
 
-	log.Printf("Executing transaction query: '%s' with value: %s", query, value)
+	storage.DebugLog(query, value)
 
 	row := tx.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -858,6 +862,7 @@ func (s *OracleStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, i
 		return false, errors.New("transaction is nil")
 	}
 	query := fmt.Sprintf("DELETE FROM %s WHERE ID = :1", strings.ToUpper(tblName))
+	storage.DebugLog(query, id)
 	res, err := tx.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err

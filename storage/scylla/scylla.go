@@ -138,6 +138,7 @@ func (s *ScyllaDBStorage) CreateTables(ctx context.Context, schema *schema.Schem
 		"CREATE KEYSPACE IF NOT EXISTS %s WITH REPLICATION = {'class': 'SimpleStrategy', 'replication_factor': 3}",
 		s.keyspace)
 
+	storage.DebugLog(createKeyspaceQuery)
 	if err := s.session.Query(createKeyspaceQuery).Exec(); err != nil {
 		return fmt.Errorf("failed to create keyspace %s: %w", s.keyspace, err)
 	}
@@ -157,6 +158,7 @@ func (s *ScyllaDBStorage) CreateTables(ctx context.Context, schema *schema.Schem
 
 		createTableQuery += ")"
 
+		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
 		if err := s.session.Query(createTableQuery).Exec(); err != nil {
@@ -256,7 +258,7 @@ func (s *ScyllaDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byt
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	if err := s.session.Query(query, values...).Exec(); err != nil {
 		return nil, false, err
@@ -294,7 +296,7 @@ func (s *ScyllaDBStorage) Update(ctx context.Context, obj *object.Object) (bool,
 	query := fmt.Sprintf("UPDATE %s.%s SET %s WHERE id = ?",
 		s.keyspace, tbl.TableName, strings.Join(setClauses, ", "))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	if err := s.session.Query(query, values...).Exec(); err != nil {
 		return false, err
@@ -379,7 +381,7 @@ func (s *ScyllaDBStorage) FindByKey(ctx context.Context, tblName, key, value str
 	query := fmt.Sprintf("SELECT %s FROM %s.%s WHERE %s = ?",
 		strings.Join(columns, ", "), s.keyspace, tbl.TableName, key)
 
-	log.Printf("Executing query: '%s' with value: %s", query, value)
+	storage.DebugLog(query, value)
 
 	iter := s.session.Query(query, value).Iter()
 	defer iter.Close()
@@ -436,6 +438,7 @@ func (s *ScyllaDBStorage) DeleteByID(ctx context.Context, tblName, id string) (b
 
 	query := fmt.Sprintf("DELETE FROM %s.%s WHERE id = ?", s.keyspace, tblName)
 
+	storage.DebugLog(query, id)
 	if err := s.session.Query(query, id).Exec(); err != nil {
 		return false, err
 	}

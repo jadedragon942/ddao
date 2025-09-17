@@ -110,6 +110,7 @@ func (s *S3Storage) Connect(ctx context.Context, connStr string) error {
 	s.uploader = manager.NewUploader(s.client)
 
 	// Test connection by checking if bucket exists
+	storage.DebugLog("HeadBucket", s.bucket)
 	_, err = s.client.HeadBucket(ctx, &s3.HeadBucketInput{
 		Bucket: aws.String(s.bucket),
 	})
@@ -143,6 +144,7 @@ func (s *S3Storage) CreateTables(ctx context.Context, schema *schema.Schema) err
 	}
 
 	schemaKey := s.prefix + "_schema.json"
+	storage.DebugLog("PutObject (schema)", schemaKey)
 	_, err = s.uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(schemaKey),
@@ -170,6 +172,7 @@ func (s *S3Storage) CreateTables(ctx context.Context, schema *schema.Schema) err
 		}
 
 		metadataKey := s.prefix + "tables/" + table.TableName + "/_metadata.json"
+		storage.DebugLog("PutObject (table metadata)", metadataKey)
 		_, err = s.uploader.Upload(ctx, &s3.PutObjectInput{
 			Bucket: aws.String(s.bucket),
 			Key:    aws.String(metadataKey),
@@ -207,6 +210,7 @@ func (s *S3Storage) Insert(ctx context.Context, obj *object.Object) ([]byte, boo
 
 	// Check if object already exists
 	objectKey := s.getObjectKey(obj.TableName, obj.ID)
+	storage.DebugLog("GetObject (check exists)", objectKey)
 	_, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -243,6 +247,7 @@ func (s *S3Storage) Insert(ctx context.Context, obj *object.Object) ([]byte, boo
 	}
 
 	// Upload to S3
+	storage.DebugLog("PutObject (insert)", objectKey)
 	_, err = s.uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -277,6 +282,7 @@ func (s *S3Storage) Update(ctx context.Context, obj *object.Object) (bool, error
 	objectKey := s.getObjectKey(obj.TableName, obj.ID)
 
 	// Check if object exists
+	storage.DebugLog("GetObject (update check)", objectKey)
 	_, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -304,6 +310,7 @@ func (s *S3Storage) Update(ctx context.Context, obj *object.Object) (bool, error
 	}
 
 	// Upload to S3
+	storage.DebugLog("PutObject (update)", objectKey)
 	_, err = s.uploader.Upload(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -348,6 +355,7 @@ func (s *S3Storage) FindByID(ctx context.Context, tblName, id string) (*object.O
 	objectKey := s.getObjectKey(tblName, id)
 
 	// Get object from S3
+	storage.DebugLog("GetObject (find by id)", objectKey)
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -399,6 +407,7 @@ func (s *S3Storage) FindByKey(ctx context.Context, tblName, key, value string) (
 	// List all objects in the table
 	tablePrefix := s.prefix + "tables/" + tblName + "/objects/"
 
+	storage.DebugLog("ListObjectsV2 (find by key)", tablePrefix)
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
 		Prefix: aws.String(tablePrefix),
@@ -469,6 +478,7 @@ func (s *S3Storage) DeleteByID(ctx context.Context, tblName, id string) (bool, e
 	objectKey := s.getObjectKey(tblName, id)
 
 	// Check if object exists
+	storage.DebugLog("GetObject (delete check)", objectKey)
 	_, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),
@@ -482,6 +492,7 @@ func (s *S3Storage) DeleteByID(ctx context.Context, tblName, id string) (bool, e
 	}
 
 	// Delete object
+	storage.DebugLog("DeleteObject", objectKey)
 	_, err = s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(objectKey),

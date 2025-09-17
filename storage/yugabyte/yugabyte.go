@@ -68,6 +68,7 @@ func (s *YugabyteDBStorage) CreateTables(ctx context.Context, schema *schema.Sch
 
 		createTableQuery += ")"
 
+		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
 		_, err := s.db.ExecContext(ctx, createTableQuery)
@@ -169,7 +170,7 @@ func (s *YugabyteDBStorage) Insert(ctx context.Context, obj *object.Object) ([]b
 		strings.Join(placeholders, ", "),
 		s.buildUpdateClause(columns, placeholders))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = s.db.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -215,7 +216,7 @@ func (s *YugabyteDBStorage) Update(ctx context.Context, obj *object.Object) (boo
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", tbl.TableName, strings.Join(setClauses, ", "), paramIndex)
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := s.db.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -315,8 +316,7 @@ func (s *YugabyteDBStorage) FindByKey(ctx context.Context, tblName, key, value s
 
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = $1", strings.Join(columns, ", "), tbl.TableName, tbl.Fields[key].Name)
 
-	log.Printf("Executing query: '%s' with value: %s", query, value)
-	log.Printf("Column pointers: %v", columnPointers)
+	storage.DebugLog(query, value)
 
 	row := s.db.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -333,7 +333,9 @@ func (s *YugabyteDBStorage) DeleteByID(ctx context.Context, tblName, id string) 
 	if s.db == nil {
 		return false, errors.New("not connected")
 	}
-	res, err := s.db.ExecContext(ctx, `DELETE FROM `+tblName+` WHERE id = $1`, id)
+	query := `DELETE FROM ` + tblName + ` WHERE id = $1`
+	storage.DebugLog(query, id)
+	res, err := s.db.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
 	}
@@ -434,7 +436,7 @@ func (s *YugabyteDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *objec
 		strings.Join(placeholders, ", "),
 		s.buildUpdateClause(columns, placeholders))
 
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 	_, err = tx.ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
@@ -472,7 +474,7 @@ func (s *YugabyteDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *objec
 	values = append(values, obj.ID)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", tbl.TableName, strings.Join(setClauses, ", "), paramIndex)
-	log.Printf("Executing query: %s with values: %v", query, values)
+	storage.DebugLog(query, values...)
 
 	res, err := tx.ExecContext(ctx, query, values...)
 	if err != nil {
@@ -565,8 +567,7 @@ func (s *YugabyteDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = $1", strings.Join(columns, ", "), tbl.TableName, tbl.Fields[key].Name)
 
-	log.Printf("Executing query: '%s' with value: %s", query, value)
-	log.Printf("Column pointers: %v", columnPointers)
+	storage.DebugLog(query, value)
 
 	row := tx.QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
@@ -583,7 +584,9 @@ func (s *YugabyteDBStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblNam
 	if tx == nil {
 		return false, errors.New("transaction is nil")
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM `+tblName+` WHERE id = $1`, id)
+	query := `DELETE FROM ` + tblName + ` WHERE id = $1`
+	storage.DebugLog(query, id)
+	res, err := tx.ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
 	}

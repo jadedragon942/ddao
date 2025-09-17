@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"log"
+	"os"
 
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
@@ -29,4 +31,17 @@ type Storage interface {
 	FindByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (*object.Object, error)
 	FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key, value string) (*object.Object, error)
 	DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (bool, error)
+}
+
+// IsDebugEnabled checks if DEBUG environment variable is set
+func IsDebugEnabled() bool {
+	debug := os.Getenv("DEBUG")
+	return debug != "" && debug != "0" && debug != "false"
+}
+
+// DebugLog logs query information if debug mode is enabled
+func DebugLog(query string, args ...interface{}) {
+	if IsDebugEnabled() {
+		log.Printf("DEBUG SQL: %s | Args: %v", query, args)
+	}
 }
