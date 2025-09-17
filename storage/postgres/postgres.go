@@ -10,10 +10,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
-	_ "github.com/lib/pq"
 )
 
 type PostgreSQLStorage struct {
@@ -28,10 +29,18 @@ func New() storage.Storage {
 }
 
 func (s *PostgreSQLStorage) Connect(ctx context.Context, connStr string) error {
-	db, err := sql.Open("postgres", connStr)
+	// Parse connection string to create pgx config
+	config, err := pgx.ParseConfig(connStr)
 	if err != nil {
 		return err
 	}
+
+	// Create database/sql connection using pgx driver
+	db := stdlib.OpenDB(*config)
+	if err := db.PingContext(ctx); err != nil {
+		return err
+	}
+
 	s.db = db
 	return nil
 }
