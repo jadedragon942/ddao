@@ -242,6 +242,48 @@ func performCRUDOperations(ctx context.Context, orm *orm.ORM) {
 }
 ```
 
+## 🐳 Docker Development Environment
+
+DDAO provides a complete Docker setup for easy development and testing with all supported databases.
+
+### Quick Start with Docker
+
+```bash
+# Clone the repository
+git clone https://github.com/jadedragon942/ddao.git
+cd ddao
+
+# Start all databases
+docker-compose up -d
+
+# Run tests against all databases
+./docker/scripts/run-tests.sh --test
+
+# Stop and cleanup
+./docker/scripts/run-tests.sh --cleanup
+```
+
+### Available Services
+
+The Docker setup includes:
+- **SQL Server 2022** (Developer Edition)
+- **Oracle XE 21c** (Express Edition)
+- **PostgreSQL 15** (with test data)
+- **MySQL 8.0** (for TiDB compatibility testing)
+
+### Environment Variables
+
+When using Docker, these environment variables are automatically set:
+
+```bash
+SQLSERVER_TEST_URL="sqlserver://sa:YourStrong@Passw0rd123@localhost:1433?database=ddao_test"
+ORACLE_TEST_URL="oracle://ddao_user:ddao_password@localhost:1521/xe"
+POSTGRES_TEST_URL="postgres://ddao_user:ddao_password@localhost:5432/ddao_test?sslmode=disable"
+MYSQL_TEST_URL="ddao_user:ddao_password@tcp(localhost:3306)/ddao_test"
+```
+
+See [docker/README.md](docker/README.md) for detailed Docker setup and configuration.
+
 ## 🗄 Database-Specific Usage
 
 ### SQLite
@@ -432,7 +474,24 @@ go test -v ./storage/sqlite/
 
 ### Running Tests with Local Databases
 
-For testing against actual database instances:
+#### Quick Start with Docker Compose
+
+DDAO includes a comprehensive Docker setup for testing with all databases:
+
+```bash
+# Start all databases and run tests
+./docker/scripts/run-tests.sh --test --cleanup
+
+# Start specific databases
+./docker/scripts/run-tests.sh --services "sqlserver oracle" --test
+
+# Just start databases (for development)
+docker-compose up -d
+```
+
+#### Manual Docker Setup
+
+For testing against individual database instances:
 
 ```bash
 # PostgreSQL
@@ -459,6 +518,8 @@ go test ./storage/yugabyte/ -run TestYugabyteDBLocal
 docker run --name tidb-server -d -p 4000:4000 pingcap/tidb:latest
 go test ./storage/tidb/ -run TestTiDBLocal
 ```
+
+See [docker/README.md](docker/README.md) for detailed Docker setup instructions.
 
 ### Custom Tests
 
