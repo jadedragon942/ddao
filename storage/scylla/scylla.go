@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gocql/gocql"
@@ -22,12 +21,10 @@ type ScyllaDBStorage struct {
 	cluster  *gocql.ClusterConfig
 	keyspace string
 	sch      *schema.Schema
-	mu       *sync.Mutex
 }
 
 func New() storage.Storage {
-	var mu sync.Mutex
-	return &ScyllaDBStorage{mu: &mu}
+	return &ScyllaDBStorage{}
 }
 
 // Connect establishes a connection to ScyllaDB
@@ -213,8 +210,8 @@ func (s *ScyllaDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byt
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -272,8 +269,8 @@ func (s *ScyllaDBStorage) Update(ctx context.Context, obj *object.Object) (bool,
 		return false, errors.New("not connected")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -330,8 +327,8 @@ func (s *ScyllaDBStorage) FindByKey(ctx context.Context, tblName, key, value str
 		return nil, errors.New("not connected")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {

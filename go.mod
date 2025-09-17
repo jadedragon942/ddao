@@ -11,7 +11,6 @@ require (
 	github.com/gocql/gocql v1.7.0
 	github.com/godror/godror v0.44.7
 	github.com/jackc/pgx/v5 v5.7.6
-	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/microsoft/go-mssqldb v1.8.0
 	github.com/stretchr/testify v1.10.0

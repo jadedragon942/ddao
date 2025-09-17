@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
@@ -19,12 +18,10 @@ import (
 type TiDBStorage struct {
 	db  *sql.DB
 	sch *schema.Schema
-	mu  *sync.Mutex
 }
 
 func New() storage.Storage {
-	var mu sync.Mutex
-	return &TiDBStorage{mu: &mu}
+	return &TiDBStorage{}
 }
 
 func (s *TiDBStorage) Connect(ctx context.Context, connStr string) error {
@@ -125,8 +122,8 @@ func (s *TiDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, b
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -183,8 +180,8 @@ func (s *TiDBStorage) Update(ctx context.Context, obj *object.Object) (bool, err
 		return false, errors.New("not connected")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -239,8 +236,8 @@ func (s *TiDBStorage) FindByKey(ctx context.Context, tblName, key, value string)
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
@@ -417,8 +414,8 @@ func (s *TiDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Obje
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -475,8 +472,8 @@ func (s *TiDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Obje
 		return false, errors.New("transaction is nil")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -524,8 +521,8 @@ func (s *TiDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key,
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.sch.Lock()
+	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {

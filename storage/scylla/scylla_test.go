@@ -72,7 +72,7 @@ func TestScyllaDBStorageBasic(t *testing.T) {
 
 	scyllaStorage, ok := storage.(*ScyllaDBStorage)
 	assert.True(t, ok)
-	assert.NotNil(t, scyllaStorage.mu)
+	assert.NotNil(t, scyllaStorage)
 }
 
 func TestScyllaDBParseConsistency(t *testing.T) {

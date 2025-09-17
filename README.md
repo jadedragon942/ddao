@@ -25,7 +25,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 | **PostgreSQL** | `github.com/jackc/pgx/v5` | ✅ Full Support | JSONB, Advanced SQL features, High performance |
 | **SQL Server** | `github.com/microsoft/go-mssqldb` | ✅ Full Support | Enterprise features, T-SQL, MERGE UPSERT |
 | **Oracle** | `github.com/godror/godror` | ✅ Full Support | Enterprise features, PL/SQL, Advanced data types |
-| **CockroachDB** | `github.com/lib/pq` | ✅ Full Support | Distributed, Native UPSERT |
+| **CockroachDB** | `github.com/jackc/pgx/v5` | ✅ Full Support | Distributed, Native UPSERT |
 | **YugabyteDB** | `github.com/jackc/pgx/v5` | ✅ Full Support | Distributed SQL, PostgreSQL compatible |
 | **TiDB** | `github.com/go-sql-driver/mysql` | ✅ Full Support | Horizontal scaling, MySQL compatible |
 | **ScyllaDB** | `github.com/scylladb/gocql` | ✅ Full Support | High-performance NoSQL, Cassandra compatible |

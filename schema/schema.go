@@ -1,9 +1,12 @@
 package schema
 
+import "sync"
+
 type Schema struct {
 	DatabaseName string
 	Tables       map[string]*TableSchema // Maps table names to their schemas
 	FieldOrder   []string                // order to use for iterating Fields
+	mu           sync.RWMutex            // mutex for thread-safe access
 }
 
 type TableSchema struct {
@@ -36,6 +39,8 @@ func New() *Schema {
 }
 
 func (s *Schema) SetDatabaseName(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.DatabaseName = name
 }
 
@@ -43,10 +48,14 @@ func (s *Schema) AddTable(table *TableSchema) {
 	if table == nil {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Tables[table.TableName] = table
 }
 
 func (s *Schema) GetTable(name string) (*TableSchema, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	table, exists := s.Tables[name]
 	return table, exists
 }
@@ -70,4 +79,20 @@ func (ts *TableSchema) AddField(field ColumnData) {
 	if field.AutoIncrement {
 		ts.AutoIncrementFields = append(ts.AutoIncrementFields, field.Name)
 	}
+}
+
+func (s *Schema) Lock() {
+	s.mu.Lock()
+}
+
+func (s *Schema) Unlock() {
+	s.mu.Unlock()
+}
+
+func (s *Schema) RLock() {
+	s.mu.RLock()
+}
+
+func (s *Schema) RUnlock() {
+	s.mu.RUnlock()
 }

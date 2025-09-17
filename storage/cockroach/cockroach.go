@@ -10,16 +10,18 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
-	_ "github.com/lib/pq"
 )
 
 type CockroachDBStorage struct {
-	db  *sql.DB
-	sch *schema.Schema
-	mu  *sync.Mutex
+	pool *pgxpool.Pool
+	db   *sql.DB  // For backward compatibility with sql.Tx interface
+	sch  *schema.Schema
 }
 
 func New() storage.Storage {
@@ -28,16 +30,19 @@ func New() storage.Storage {
 }
 
 func (s *CockroachDBStorage) Connect(ctx context.Context, connStr string) error {
-	db, err := sql.Open("postgres", connStr)
+	pool, err := pgxpool.New(ctx, connStr)
 	if err != nil {
 		return err
 	}
-	s.db = db
+	s.pool = pool
+
+	// Also create a sql.DB instance for backward compatibility
+	s.db = stdlib.OpenDBFromPool(pool)
 	return nil
 }
 
 func (s *CockroachDBStorage) CreateTables(ctx context.Context, schema *schema.Schema) error {
-	if s.db == nil {
+	if s.pool == nil {
 		return errors.New("not connected")
 	}
 
@@ -71,7 +76,7 @@ func (s *CockroachDBStorage) CreateTables(ctx context.Context, schema *schema.Sc
 		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
-		_, err := s.db.ExecContext(ctx, createTableQuery)
+		_, err := s.pool.Exec(ctx, createTableQuery)
 		if err != nil {
 			return fmt.Errorf("failed to create table %s: %w", table.TableName, err)
 		}
@@ -111,7 +116,7 @@ func (s *CockroachDBStorage) mapDataType(dataType string) string {
 }
 
 func (s *CockroachDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
-	if s.db == nil {
+	if s.pool == nil {
 		return nil, false, errors.New("not connected")
 	}
 	data, err := json.Marshal(obj)
@@ -122,9 +127,6 @@ func (s *CockroachDBStorage) Insert(ctx context.Context, obj *object.Object) ([]
 	if s.sch == nil {
 		return nil, false, errors.New("schema not initialized")
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -170,7 +172,7 @@ func (s *CockroachDBStorage) Insert(ctx context.Context, obj *object.Object) ([]
 		strings.Join(placeholders, ", "))
 
 	storage.DebugLog(query, values...)
-	_, err = s.db.ExecContext(ctx, query, values...)
+	_, err = s.pool.Exec(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -179,12 +181,9 @@ func (s *CockroachDBStorage) Insert(ctx context.Context, obj *object.Object) ([]
 }
 
 func (s *CockroachDBStorage) Update(ctx context.Context, obj *object.Object) (bool, error) {
-	if s.db == nil {
+	if s.pool == nil {
 		return false, errors.New("not connected")
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -209,17 +208,12 @@ func (s *CockroachDBStorage) Update(ctx context.Context, obj *object.Object) (bo
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", tbl.TableName, strings.Join(setClauses, ", "), paramIndex)
 	storage.DebugLog(query, values...)
 
-	res, err := s.db.ExecContext(ctx, query, values...)
+	commandTag, err := s.pool.Exec(ctx, query, values...)
 	if err != nil {
 		return false, err
 	}
 
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-
-	return rowsAffected > 0, nil
+	return commandTag.RowsAffected() > 0, nil
 }
 
 // Upsert inserts or updates an object, delegating to Insert which already implements upsert behavior using UPSERT INTO
@@ -241,9 +235,6 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
@@ -264,42 +255,43 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
 				columnPointer := new(*string)
-				columnPointers = append(columnPointers, &columnPointer)
+				columnPointers = append(columnPointers, columnPointer)
 				obj.Fields[field.Name] = columnPointer
 			} else {
 				columnPointer := new(string)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
+				obj.Fields[field.Name] = columnPointer
 			}
 		case "INTEGER", "INT":
 			if field.Nullable {
 				columnPointer := new(*int64)
-				columnPointers = append(columnPointers, &columnPointer)
+				columnPointers = append(columnPointers, columnPointer)
 				obj.Fields[field.Name] = columnPointer
 			} else {
 				columnPointer := new(int64)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
+				obj.Fields[field.Name] = columnPointer
 			}
 		case "REAL", "FLOAT":
 			columnPointer := new(float64)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "BLOB":
 			columnPointer := new([]byte)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "BOOLEAN":
 			columnPointer := new(bool)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "JSON":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
+			obj.Fields[field.Name] = columnPointer
 		default:
 			return nil, fmt.Errorf("unsupported data type %s for field %s", field.DataType, field.Name)
 		}
@@ -309,9 +301,9 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 
 	storage.DebugLog(query, value)
 
-	row := s.db.QueryRowContext(ctx, query, value)
+	row := s.pool.QueryRow(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -321,25 +313,24 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 }
 
 func (s *CockroachDBStorage) DeleteByID(ctx context.Context, tblName, id string) (bool, error) {
-	if s.db == nil {
+	if s.pool == nil {
 		return false, errors.New("not connected")
 	}
 	query := `DELETE FROM ` + tblName + ` WHERE id = $1`
 	storage.DebugLog(query, id)
-	res, err := s.db.ExecContext(ctx, query, id)
+	commandTag, err := s.pool.Exec(ctx, query, id)
 	if err != nil {
 		return false, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return n > 0, nil
+	return commandTag.RowsAffected() > 0, nil
 }
 
 func (s *CockroachDBStorage) ResetConnection(ctx context.Context) error {
 	if s.db != nil {
-		return s.db.Close()
+		s.db.Close()
+	}
+	if s.pool != nil {
+		s.pool.Close()
 	}
 	return nil
 }
@@ -379,9 +370,6 @@ func (s *CockroachDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *obje
 	if s.sch == nil {
 		return nil, false, errors.New("schema not initialized")
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
@@ -440,9 +428,6 @@ func (s *CockroachDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *obje
 		return false, errors.New("transaction is nil")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -491,9 +476,6 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
@@ -514,42 +496,43 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
 				columnPointer := new(*string)
-				columnPointers = append(columnPointers, &columnPointer)
+				columnPointers = append(columnPointers, columnPointer)
 				obj.Fields[field.Name] = columnPointer
 			} else {
 				columnPointer := new(string)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
+				obj.Fields[field.Name] = columnPointer
 			}
 		case "INTEGER", "INT":
 			if field.Nullable {
 				columnPointer := new(*int64)
-				columnPointers = append(columnPointers, &columnPointer)
+				columnPointers = append(columnPointers, columnPointer)
 				obj.Fields[field.Name] = columnPointer
 			} else {
 				columnPointer := new(int64)
-				columnPointers = append(columnPointers, &columnPointer)
-				obj.Fields[field.Name] = *columnPointer
+				columnPointers = append(columnPointers, columnPointer)
+				obj.Fields[field.Name] = columnPointer
 			}
 		case "REAL", "FLOAT":
 			columnPointer := new(float64)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "BLOB":
 			columnPointer := new([]byte)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "BOOLEAN":
 			columnPointer := new(bool)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "JSON":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
 		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
 			columnPointer := new(string)
-			columnPointers = append(columnPointers, &columnPointer)
+			columnPointers = append(columnPointers, columnPointer)
+			obj.Fields[field.Name] = columnPointer
 		default:
 			return nil, fmt.Errorf("unsupported data type %s for field %s", field.DataType, field.Name)
 		}
