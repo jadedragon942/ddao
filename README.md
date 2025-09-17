@@ -7,7 +7,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 
 ## 🚀 Features
 
-- **Multi-Database Support**: SQLite, PostgreSQL, CockroachDB, YugabyteDB, TiDB, and ScyllaDB
+- **Multi-Database Support**: SQLite, PostgreSQL, SQL Server, Oracle, CockroachDB, YugabyteDB, TiDB, and ScyllaDB
 - **Dynamic Schema Definition**: Define table schemas programmatically with flexible field types
 - **Unified Interface**: Same API works across all supported databases
 - **Type-Safe Operations**: Built-in type conversion and validation
@@ -22,7 +22,9 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 | Database | Driver | Status | Features |
 |----------|--------|--------|----------|
 | **SQLite** | `github.com/mattn/go-sqlite3` | ✅ Full Support | In-memory & file-based, UPSERT |
-| **PostgreSQL** | `github.com/lib/pq` | ✅ Full Support | JSONB, Advanced SQL features |
+| **PostgreSQL** | `github.com/jackc/pgx/v5` | ✅ Full Support | JSONB, Advanced SQL features, High performance |
+| **SQL Server** | `github.com/microsoft/go-mssqldb` | ✅ Full Support | Enterprise features, T-SQL, MERGE UPSERT |
+| **Oracle** | `github.com/godror/godror` | ✅ Full Support | Enterprise features, PL/SQL, Advanced data types |
 | **CockroachDB** | `github.com/lib/pq` | ✅ Full Support | Distributed, Native UPSERT |
 | **YugabyteDB** | `github.com/jackc/pgx/v5` | ✅ Full Support | Distributed SQL, PostgreSQL compatible |
 | **TiDB** | `github.com/go-sql-driver/mysql` | ✅ Full Support | Horizontal scaling, MySQL compatible |
@@ -34,6 +36,10 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 go get github.com/jadedragon942/ddao
 ```
 
+### Special Requirements
+
+**Oracle Driver**: The Oracle driver (`godror`) requires Oracle client libraries to be installed on the system at runtime. See the [Oracle Installation Guide](https://oracle.github.io/odpi/doc/installation.html) for platform-specific instructions.
+
 ### Database-Specific Dependencies
 
 The core library includes all necessary drivers. For specific databases:
@@ -43,6 +49,15 @@ The core library includes all necessary drivers. For specific databases:
 go get github.com/mattn/go-sqlite3
 
 # PostgreSQL (included)
+go get github.com/jackc/pgx/v5
+
+# SQL Server (included)
+go get github.com/microsoft/go-mssqldb
+
+# Oracle (included - requires Oracle client libraries at runtime)
+go get github.com/godror/godror
+
+# CockroachDB (included)
 go get github.com/lib/pq
 
 # YugabyteDB (included)
@@ -64,7 +79,7 @@ DDAO consists of four main components:
 │    ORM      │────│   Object    │────│   Schema    │────│   Storage   │
 │             │    │             │    │             │    │             │
 │ High-level  │    │ Data model  │    │ Table def   │    │ DB backends │
-│ operations  │    │ with fields │    │ with types  │    │ (5 drivers) │
+│ operations  │    │ with fields │    │ with types  │    │ (8 drivers) │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
@@ -72,7 +87,7 @@ DDAO consists of four main components:
 
 1. **Object**: Represents a data record with dynamic fields
 2. **Schema**: Defines table structure and field types
-3. **Storage**: Database-specific implementations (SQLite, PostgreSQL, etc.)
+3. **Storage**: Database-specific implementations (SQLite, PostgreSQL, SQL Server, Oracle, etc.)
 4. **ORM**: High-level interface that orchestrates the components
 
 ## 📚 Quick Start
@@ -249,6 +264,24 @@ storage := postgres.New()
 err := storage.Connect(ctx, "postgres://user:password@localhost:5432/dbname?sslmode=disable")
 ```
 
+### SQL Server
+
+```go
+import "github.com/jadedragon942/ddao/storage/sqlserver"
+
+storage := sqlserver.New()
+err := storage.Connect(ctx, "sqlserver://sa:YourStrong@Passw0rd@localhost:1433?database=tempdb")
+```
+
+### Oracle
+
+```go
+import "github.com/jadedragon942/ddao/storage/oracle"
+
+storage := oracle.New()
+err := storage.Connect(ctx, "oracle://system:OraclePassword123@localhost:1521/xe")
+```
+
 ### CockroachDB
 
 ```go
@@ -406,6 +439,14 @@ For testing against actual database instances:
 docker run --name postgres-test -e POSTGRES_PASSWORD=testpass -e POSTGRES_DB=testdb -p 5432:5432 -d postgres:13
 go test ./storage/postgres/ -run TestPostgreSQLLocal
 
+# SQL Server
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=YourStrong@Passw0rd" -p 1433:1433 --name sqlserver-test -d mcr.microsoft.com/mssql/server:2019-latest
+go test ./storage/sqlserver/ -run TestSQLServerLocal
+
+# Oracle (requires Oracle client libraries)
+docker run -d -p 1521:1521 -e ORACLE_PASSWORD=OraclePassword123 gvenzl/oracle-xe:21-slim
+go test ./storage/oracle/ -run TestOracleLocal
+
 # CockroachDB
 docker run -d --name=roach -p 26257:26257 cockroachdb/cockroach:latest start-single-node --insecure
 go test ./storage/cockroach/ -run TestCockroachDBLocal
@@ -473,6 +514,8 @@ DDAO implements database-specific UPSERT (insert-or-update) operations:
 
 - **SQLite**: `INSERT OR REPLACE INTO ...`
 - **PostgreSQL/YugabyteDB**: `INSERT ... ON CONFLICT DO UPDATE SET ...`
+- **SQL Server**: `MERGE ... WHEN MATCHED THEN UPDATE ... WHEN NOT MATCHED THEN INSERT ...`
+- **Oracle**: `MERGE INTO ... USING (SELECT ... FROM dual) ... ON ... WHEN MATCHED THEN UPDATE ... WHEN NOT MATCHED THEN INSERT ...`
 - **CockroachDB**: `UPSERT INTO ...`
 - **TiDB**: `REPLACE INTO ...`
 
@@ -480,13 +523,15 @@ DDAO implements database-specific UPSERT (insert-or-update) operations:
 
 DDAO automatically maps generic types to database-specific types:
 
-| Generic Type | SQLite | PostgreSQL | CockroachDB | YugabyteDB | TiDB |
-|--------------|--------|------------|-------------|------------|------|
-| `text` | TEXT | TEXT | STRING | TEXT | TEXT |
-| `integer` | INTEGER | INTEGER | INT8 | INTEGER | BIGINT |
-| `json` | TEXT | JSONB | JSONB | JSONB | JSON |
-| `datetime` | TEXT | TIMESTAMP | TIMESTAMPTZ | TIMESTAMP | TIMESTAMP |
-| `boolean` | INTEGER | BOOLEAN | BOOL | BOOLEAN | BOOLEAN |
+| Generic Type | SQLite | PostgreSQL | SQL Server | Oracle | CockroachDB | YugabyteDB | TiDB |
+|--------------|--------|------------|------------|--------|-------------|------------|------|
+| `text` | TEXT | TEXT | NVARCHAR(MAX) | CLOB | STRING | TEXT | TEXT |
+| `integer` | INTEGER | INTEGER | BIGINT | NUMBER(19) | INT8 | INTEGER | BIGINT |
+| `json` | TEXT | JSONB | NVARCHAR(MAX) | CLOB | JSONB | JSONB | JSON |
+| `datetime` | TEXT | TIMESTAMP | DATETIME2 | TIMESTAMP | TIMESTAMPTZ | TIMESTAMP | TIMESTAMP |
+| `boolean` | INTEGER | BOOLEAN | BIT | NUMBER(1) | BOOL | BOOLEAN | BOOLEAN |
+| `blob` | BLOB | BYTEA | VARBINARY(MAX) | BLOB | BYTES | BYTEA | BLOB |
+| `uuid` | TEXT | UUID | UNIQUEIDENTIFIER | VARCHAR2(36) | UUID | UUID | VARCHAR(36) |
 
 ### Field Ordering Consistency
 
@@ -718,4 +763,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**DDAO** - Making multi-database development simple and consistent! 🚀# ddao
+**DDAO** - Making multi-database development simple and consistent! 🚀
