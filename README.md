@@ -7,7 +7,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 
 ## 🚀 Features
 
-- **Multi-Database Support**: SQLite, PostgreSQL, CockroachDB, YugabyteDB, and TiDB
+- **Multi-Database Support**: SQLite, PostgreSQL, CockroachDB, YugabyteDB, TiDB, and ScyllaDB
 - **Dynamic Schema Definition**: Define table schemas programmatically with flexible field types
 - **Unified Interface**: Same API works across all supported databases
 - **Type-Safe Operations**: Built-in type conversion and validation
@@ -26,6 +26,7 @@ DDAO is a flexible, multi-database ORM (Object-Relational Mapping) library for G
 | **CockroachDB** | `github.com/lib/pq` | ✅ Full Support | Distributed, Native UPSERT |
 | **YugabyteDB** | `github.com/jackc/pgx/v5` | ✅ Full Support | Distributed SQL, PostgreSQL compatible |
 | **TiDB** | `github.com/go-sql-driver/mysql` | ✅ Full Support | Horizontal scaling, MySQL compatible |
+| **ScyllaDB** | `github.com/scylladb/gocql` | ✅ Full Support | High-performance NoSQL, Cassandra compatible |
 
 ## 🛠 Installation
 
@@ -49,6 +50,9 @@ go get github.com/jackc/pgx/v5
 
 # MySQL/TiDB (included)
 go get github.com/go-sql-driver/mysql
+
+# ScyllaDB (included)
+go get github.com/scylladb/gocql
 ```
 
 ## 🏗 Architecture
@@ -270,6 +274,15 @@ import "github.com/jadedragon942/ddao/storage/tidb"
 
 storage := tidb.New()
 err := storage.Connect(ctx, "root:password@tcp(localhost:4000)/test")
+```
+
+### ScyllaDB
+
+```go
+import "github.com/jadedragon942/ddao/storage/scylla"
+
+storage := scylla.New()
+err := storage.Connect(ctx, "localhost:9042,192.168.1.2:9042/mykeyspace?consistency=quorum&timeout=10s")
 ```
 
 ## 🔧 Advanced Features
