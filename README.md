@@ -628,6 +628,7 @@ func safeTransactionalOperation(ctx context.Context, orm *orm.ORM) error {
     shouldCommit = true
     return nil
 }
+```
 
 ## 🔒 Best Practices
 
