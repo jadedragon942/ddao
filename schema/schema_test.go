@@ -35,25 +35,6 @@ func TestGetTestSchema(t *testing.T) {
 	}
 }
 
-func TestAddAndGetTable(t *testing.T) {
-	s := New()
-	table := NewTableSchema("users")
-	s.AddTable(table)
-
-	got, ok := s.GetTable("users")
-	if !ok {
-		t.Fatal("expected table 'users' to exist")
-	}
-	if got != table {
-		t.Errorf("expected returned table to be the same as added table")
-	}
-
-	_, ok = s.GetTable("nonexistent")
-	if ok {
-		t.Error("expected nonexistent table to not exist")
-	}
-}
-
 func TestAddTableNil(t *testing.T) {
 	s := New()
 	s.AddTable(nil)

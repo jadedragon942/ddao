@@ -10,7 +10,7 @@ tidb:
 	# MySQL/TiDB (with database)
 	docker-compose -f docker-compose.mysql.yml up ddao-mysql
 
-cockroachdb:
+cockroach:
 	# CockroachDB (with database)
 	docker-compose -f docker-compose.cockroach.yml up ddao-cockroach
 

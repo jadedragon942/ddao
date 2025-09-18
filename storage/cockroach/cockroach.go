@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,13 +19,12 @@ import (
 
 type CockroachDBStorage struct {
 	pool *pgxpool.Pool
-	db   *sql.DB  // For backward compatibility with sql.Tx interface
+	db   *sql.DB // For backward compatibility with sql.Tx interface
 	sch  *schema.Schema
 }
 
 func New() storage.Storage {
-	var mu sync.Mutex
-	return &CockroachDBStorage{mu: &mu}
+	return &CockroachDBStorage{}
 }
 
 func (s *CockroachDBStorage) Connect(ctx context.Context, connStr string) error {
@@ -247,10 +245,10 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 	obj.TableName = tbl.TableName
 	obj.Fields = make(map[string]any)
 
-	for _, field := range tbl.Fields {
+	for _, fieldName := range tbl.FieldOrder {
+		field := tbl.Fields[fieldName]
 		columns = append(columns, field.Name)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -307,6 +305,60 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	// Dereference pointers and set actual values in object fields
+	for i, fieldName := range tbl.FieldOrder {
+		field := tbl.Fields[fieldName]
+		switch strings.ToUpper(field.DataType) {
+		case "TEXT", "VARCHAR", "CHAR":
+			if field.Nullable {
+				ptr := columnPointers[i].(**string)
+				if *ptr != nil {
+					obj.Fields[field.Name] = **ptr
+				} else {
+					obj.Fields[field.Name] = nil
+				}
+			} else {
+				ptr := columnPointers[i].(*string)
+				obj.Fields[field.Name] = *ptr
+				// Set ID field
+				if field.Name == "id" {
+					obj.ID = *ptr
+				}
+			}
+		case "INTEGER", "INT":
+			if field.Nullable {
+				ptr := columnPointers[i].(**int64)
+				if *ptr != nil {
+					obj.Fields[field.Name] = **ptr
+				} else {
+					obj.Fields[field.Name] = nil
+				}
+			} else {
+				ptr := columnPointers[i].(*int64)
+				obj.Fields[field.Name] = *ptr
+			}
+		case "REAL", "FLOAT":
+			ptr := columnPointers[i].(*float64)
+			obj.Fields[field.Name] = *ptr
+		case "BLOB":
+			ptr := columnPointers[i].(*[]byte)
+			obj.Fields[field.Name] = *ptr
+		case "BOOLEAN":
+			ptr := columnPointers[i].(*bool)
+			obj.Fields[field.Name] = *ptr
+		case "JSON":
+			ptr := columnPointers[i].(*string)
+			obj.Fields[field.Name] = *ptr
+		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
+			ptr := columnPointers[i].(*string)
+			obj.Fields[field.Name] = *ptr
+			// Set ID field
+			if field.Name == "id" {
+				obj.ID = *ptr
+			}
+		}
 	}
 
 	return &obj, nil
@@ -488,10 +540,10 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 	obj.TableName = tbl.TableName
 	obj.Fields = make(map[string]any)
 
-	for _, field := range tbl.Fields {
+	for _, fieldName := range tbl.FieldOrder {
+		field := tbl.Fields[fieldName]
 		columns = append(columns, field.Name)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -548,6 +600,60 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	// Dereference pointers and set actual values in object fields
+	for i, fieldName := range tbl.FieldOrder {
+		field := tbl.Fields[fieldName]
+		switch strings.ToUpper(field.DataType) {
+		case "TEXT", "VARCHAR", "CHAR":
+			if field.Nullable {
+				ptr := columnPointers[i].(**string)
+				if *ptr != nil {
+					obj.Fields[field.Name] = **ptr
+				} else {
+					obj.Fields[field.Name] = nil
+				}
+			} else {
+				ptr := columnPointers[i].(*string)
+				obj.Fields[field.Name] = *ptr
+				// Set ID field
+				if field.Name == "id" {
+					obj.ID = *ptr
+				}
+			}
+		case "INTEGER", "INT":
+			if field.Nullable {
+				ptr := columnPointers[i].(**int64)
+				if *ptr != nil {
+					obj.Fields[field.Name] = **ptr
+				} else {
+					obj.Fields[field.Name] = nil
+				}
+			} else {
+				ptr := columnPointers[i].(*int64)
+				obj.Fields[field.Name] = *ptr
+			}
+		case "REAL", "FLOAT":
+			ptr := columnPointers[i].(*float64)
+			obj.Fields[field.Name] = *ptr
+		case "BLOB":
+			ptr := columnPointers[i].(*[]byte)
+			obj.Fields[field.Name] = *ptr
+		case "BOOLEAN":
+			ptr := columnPointers[i].(*bool)
+			obj.Fields[field.Name] = *ptr
+		case "JSON":
+			ptr := columnPointers[i].(*string)
+			obj.Fields[field.Name] = *ptr
+		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
+			ptr := columnPointers[i].(*string)
+			obj.Fields[field.Name] = *ptr
+			// Set ID field
+			if field.Name == "id" {
+				obj.ID = *ptr
+			}
+		}
 	}
 
 	return &obj, nil

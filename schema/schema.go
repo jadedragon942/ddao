@@ -53,11 +53,11 @@ func (s *Schema) AddTable(table *TableSchema) {
 	s.Tables[table.TableName] = table
 }
 
-func (s *Schema) GetTable(name string) (*TableSchema, bool) {
+func (s *Schema) GetTable(name string) (TableSchema, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	table, exists := s.Tables[name]
-	return table, exists
+	return *table, exists
 }
 
 func NewTableSchema(name string) *TableSchema {
