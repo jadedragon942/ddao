@@ -129,9 +129,6 @@ func (s *PostgreSQLStorage) Insert(ctx context.Context, obj *object.Object) ([]b
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -198,9 +195,6 @@ func (s *PostgreSQLStorage) Update(ctx context.Context, obj *object.Object) (boo
 		return false, errors.New("not connected")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -250,9 +244,6 @@ func (s *PostgreSQLStorage) FindByKey(ctx context.Context, tblName, key, value s
 	if tblName == "" || key == "" || value == "" {
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
-
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
@@ -438,9 +429,6 @@ func (s *PostgreSQLStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *objec
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -499,9 +487,6 @@ func (s *PostgreSQLStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *objec
 		return false, errors.New("transaction is nil")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -549,9 +534,6 @@ func (s *PostgreSQLStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 	if tblName == "" || key == "" || value == "" {
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
-
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
