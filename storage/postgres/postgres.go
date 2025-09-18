@@ -250,11 +250,8 @@ func (s *PostgreSQLStorage) FindByKey(ctx context.Context, tblName, key, value s
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
 
-	// Create ordered slices of fields to ensure consistent mapping
-	fieldNames := make([]string, 0, len(tbl.Fields))
-	for _, field := range tbl.Fields {
-		fieldNames = append(fieldNames, field.Name)
-	}
+	// Use the field order from the table schema to ensure consistent mapping
+	fieldNames := tbl.FieldOrder
 
 	columns := make([]string, 0, len(fieldNames))
 	columnPointers := make([]any, 0, len(fieldNames))
@@ -540,11 +537,8 @@ func (s *PostgreSQLStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
 
-	// Create ordered slices of fields to ensure consistent mapping
-	fieldNames := make([]string, 0, len(tbl.Fields))
-	for _, field := range tbl.Fields {
-		fieldNames = append(fieldNames, field.Name)
-	}
+	// Use the field order from the table schema to ensure consistent mapping
+	fieldNames := tbl.FieldOrder
 
 	columns := make([]string, 0, len(fieldNames))
 	columnPointers := make([]any, 0, len(fieldNames))
