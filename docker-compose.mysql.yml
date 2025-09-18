@@ -12,7 +12,8 @@ services:
       - CGO_ENABLED=1
       - TIDB_TEST_URL=ddao:ddao_password@tcp(mysql:3306)/ddao_test
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     networks:
       - ddao-mysql-network
 

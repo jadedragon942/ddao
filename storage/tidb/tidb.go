@@ -122,9 +122,6 @@ func (s *TiDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, b
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -180,9 +177,6 @@ func (s *TiDBStorage) Update(ctx context.Context, obj *object.Object) (bool, err
 		return false, errors.New("not connected")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -235,9 +229,6 @@ func (s *TiDBStorage) FindByKey(ctx context.Context, tblName, key, value string)
 	if tblName == "" || key == "" || value == "" {
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
-
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
@@ -414,9 +405,6 @@ func (s *TiDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Obje
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -472,9 +460,6 @@ func (s *TiDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Obje
 		return false, errors.New("transaction is nil")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	tbl, ok := s.sch.GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
@@ -520,9 +505,6 @@ func (s *TiDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key,
 	if tblName == "" || key == "" || value == "" {
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
-
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	tbl, ok := s.sch.GetTable(tblName)
 	if !ok {
