@@ -308,7 +308,6 @@ func (s *SQLServerStorage) FindByKey(ctx context.Context, tblName, key, value st
 		columns = append(columns, fmt.Sprintf("[%s]", field.Name))
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -646,7 +645,6 @@ func (s *SQLServerStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName,
 		columns = append(columns, fmt.Sprintf("[%s]", field.Name))
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {

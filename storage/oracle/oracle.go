@@ -368,7 +368,6 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 		columns = append(columns, strings.ToUpper(field.Name))
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -745,7 +744,6 @@ func (s *OracleStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, ke
 		columns = append(columns, strings.ToUpper(field.Name))
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {

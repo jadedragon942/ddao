@@ -248,7 +248,6 @@ func (s *TiDBStorage) FindByKey(ctx context.Context, tblName, key, value string)
 		columns = append(columns, field.Name)
 		fieldDefs = append(fieldDefs, field)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -524,7 +523,6 @@ func (s *TiDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, key,
 		columns = append(columns, field.Name)
 		fieldDefs = append(fieldDefs, field)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {

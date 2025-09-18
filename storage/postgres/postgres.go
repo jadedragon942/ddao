@@ -274,7 +274,6 @@ func (s *PostgreSQLStorage) FindByKey(ctx context.Context, tblName, key, value s
 		columns = append(columns, field.Name)
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -574,7 +573,6 @@ func (s *PostgreSQLStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 		columns = append(columns, field.Name)
 		fieldTypes = append(fieldTypes, field.DataType)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {

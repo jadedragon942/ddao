@@ -265,7 +265,6 @@ func (s *YugabyteDBStorage) FindByKey(ctx context.Context, tblName, key, value s
 	for _, field := range tbl.Fields {
 		columns = append(columns, field.Name)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {
@@ -516,7 +515,6 @@ func (s *YugabyteDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 	for _, field := range tbl.Fields {
 		columns = append(columns, field.Name)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			if field.Nullable {

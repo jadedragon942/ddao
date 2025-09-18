@@ -348,7 +348,6 @@ func (s *ScyllaDBStorage) FindByKey(ctx context.Context, tblName, key, value str
 		field := tbl.Fields[fieldName]
 		columns = append(columns, field.Name)
 
-		log.Printf("Processing field: %s with data type: %s", field.Name, field.DataType)
 		switch strings.ToUpper(field.DataType) {
 		case "TEXT", "VARCHAR", "CHAR":
 			columnPointers = append(columnPointers, new(string))
