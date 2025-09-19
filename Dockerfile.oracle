@@ -2,7 +2,20 @@ FROM golang:1.25.1-alpine AS test
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev
+RUN apk add --no-cache gcc musl-dev libc6-compat wget unzip libnsl libaio
+
+# Install Oracle Instant Client
+RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip && \
+    unzip instantclient-basic-linux.x64-19.23.0.0.0dbru.zip && \
+    mv instantclient_19_23 /opt/oracle && \
+    rm instantclient-basic-linux.x64-19.23.0.0.0dbru.zip
+
+# Create symlinks for compatibility
+RUN ln -s /usr/lib/libnsl.so.3 /usr/lib/libnsl.so.1 || true
+RUN ln -s /lib/libc.musl-x86_64.so.1 /usr/lib/libresolv.so.2 || true
+
+ENV LD_LIBRARY_PATH=/opt/oracle:$LD_LIBRARY_PATH
+ENV PKG_CONFIG_PATH=/opt/oracle
 
 COPY go.mod go.sum ./
 RUN go mod download
