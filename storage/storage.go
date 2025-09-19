@@ -20,6 +20,7 @@ type Storage interface {
 	FindByKey(ctx context.Context, tblName, key, value string) (*object.Object, error)
 	DeleteByID(ctx context.Context, tblName, id string) (bool, error)
 	ResetConnection(ctx context.Context) error
+	AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error
 
 	// Transaction support
 	BeginTx(ctx context.Context) (*sql.Tx, error)

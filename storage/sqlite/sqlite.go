@@ -448,3 +448,24 @@ func (s *SQLiteStorage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 	// For SQLite, UpsertTx is the same as InsertTx because InsertTx already uses INSERT OR REPLACE
 	return s.InsertTx(ctx, tx, obj)
 }
+
+func (s *SQLiteStorage) AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error {
+	if err := s.ValidateConnection(); err != nil {
+		return err
+	}
+
+	nullableClause := "NOT NULL"
+	if nullable {
+		nullableClause = "NULL"
+	}
+
+	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s %s", tableName, columnName, dataType, nullableClause)
+
+	storage.DebugLog(query)
+	_, err := s.GetDB().ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to alter table %s: %w", tableName, err)
+	}
+
+	return nil
+}

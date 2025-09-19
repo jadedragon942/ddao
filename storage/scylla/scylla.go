@@ -485,3 +485,47 @@ func (s *ScyllaDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, 
 func (s *ScyllaDBStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, id string) (bool, error) {
 	return false, errors.New("ScyllaDB does not support SQL-style transactions")
 }
+
+func (s *ScyllaDBStorage) AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error {
+	if s.session == nil {
+		return errors.New("not connected to ScyllaDB")
+	}
+
+	cqlDataType := s.mapDataTypeForScylla(dataType)
+	query := fmt.Sprintf("ALTER TABLE %s.%s ADD %s %s", s.keyspace, tableName, columnName, cqlDataType)
+
+	storage.DebugLog(query)
+	err := s.session.Query(query).Exec()
+	if err != nil {
+		return fmt.Errorf("failed to alter table %s: %w", tableName, err)
+	}
+
+	return nil
+}
+
+func (s *ScyllaDBStorage) mapDataTypeForScylla(dataType string) string {
+	switch strings.ToUpper(dataType) {
+	case "TEXT", "VARCHAR", "CHAR":
+		return "text"
+	case "INTEGER", "INT":
+		return "int"
+	case "BIGINT":
+		return "bigint"
+	case "REAL", "FLOAT":
+		return "float"
+	case "DOUBLE":
+		return "double"
+	case "BOOLEAN":
+		return "boolean"
+	case "JSON":
+		return "text"
+	case "TIMESTAMP":
+		return "timestamp"
+	case "UUID":
+		return "uuid"
+	case "BLOB":
+		return "blob"
+	default:
+		return "text"
+	}
+}

@@ -725,3 +725,25 @@ func (s *SQLServerStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName
 	}
 	return n > 0, nil
 }
+
+func (s *SQLServerStorage) AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error {
+	if err := s.ValidateConnection(); err != nil {
+		return err
+	}
+
+	sqlServerDataType := s.mapDataType(dataType)
+	nullableClause := "NOT NULL"
+	if nullable {
+		nullableClause = "NULL"
+	}
+
+	query := fmt.Sprintf("ALTER TABLE [%s] ADD [%s] %s %s", tableName, columnName, sqlServerDataType, nullableClause)
+
+	storage.DebugLog(query)
+	_, err := s.GetDB().ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to alter table %s: %w", tableName, err)
+	}
+
+	return nil
+}

@@ -551,3 +551,7 @@ func (s *S3Storage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblName, id st
 	// For simplicity, delegate to regular DeleteByID
 	return s.DeleteByID(ctx, tblName, id)
 }
+
+func (s *S3Storage) AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error {
+	return errors.New("S3 storage does not support ALTER TABLE operations - schema changes are handled dynamically during object operations")
+}

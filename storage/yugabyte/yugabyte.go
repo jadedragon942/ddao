@@ -575,3 +575,25 @@ func (s *YugabyteDBStorage) DeleteByIDTx(ctx context.Context, tx *sql.Tx, tblNam
 	}
 	return n > 0, nil
 }
+
+func (s *YugabyteDBStorage) AlterTable(ctx context.Context, tableName, columnName, dataType string, nullable bool) error {
+	if err := s.ValidateConnection(); err != nil {
+		return err
+	}
+
+	ybDataType := s.mapDataType(dataType)
+	nullableClause := "NOT NULL"
+	if nullable {
+		nullableClause = "NULL"
+	}
+
+	query := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s %s", tableName, columnName, ybDataType, nullableClause)
+
+	storage.DebugLog(query)
+	_, err := s.GetDB().ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("failed to alter table %s: %w", tableName, err)
+	}
+
+	return nil
+}
