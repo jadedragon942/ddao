@@ -27,7 +27,7 @@ func New() storage.Storage {
 }
 
 func (s *SQLServerStorage) Connect(ctx context.Context, connStr string) error {
-	db, err := sql.Open("sqlserver", connStr)
+	db, err := sql.Open("mssql", connStr)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 
 		columns = append(columns, fmt.Sprintf("[%s]", name))
 		placeholders = append(placeholders, "?")
-		updateClauses = append(updateClauses, fmt.Sprintf("[%s] = ?", name))
+		updateClauses = append(updateClauses, fmt.Sprintf("[%s] = source.[%s]", name, name))
 
 		schField, ok := tbl.Fields[name]
 		if !ok {
@@ -169,25 +169,6 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 		}
 	}
 
-	// Add values again for the UPDATE part of MERGE
-	for name, field := range obj.Fields {
-		if strings.ToLower(name) == "id" {
-			continue
-		}
-		schField, ok := tbl.Fields[name]
-		if !ok {
-			return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
-		}
-		if strings.ToLower(schField.DataType) == "json" {
-			jsonData, err := json.Marshal(field)
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
-			}
-			values = append(values, string(jsonData))
-		} else {
-			values = append(values, field)
-		}
-	}
 
 	// Use MERGE for UPSERT functionality
 	query := fmt.Sprintf(`
@@ -212,7 +193,13 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 		}(),
 		strings.Join(updateClauses, ", "),
 		strings.Join(columns, ", "),
-		strings.Join(placeholders, ", "))
+		strings.Join(func() []string {
+			sourceCols := make([]string, len(columns))
+			for i, col := range columns {
+				sourceCols[i] = "source." + col
+			}
+			return sourceCols
+		}(), ", "))
 
 	storage.DebugLog(query, values...)
 	_, err = s.GetDB().ExecContext(ctx, query, values...)
@@ -487,7 +474,7 @@ func (s *SQLServerStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object
 
 		columns = append(columns, fmt.Sprintf("[%s]", name))
 		placeholders = append(placeholders, "?")
-		updateClauses = append(updateClauses, fmt.Sprintf("[%s] = ?", name))
+		updateClauses = append(updateClauses, fmt.Sprintf("[%s] = source.[%s]", name, name))
 
 		schField, ok := tbl.Fields[name]
 		if !ok {
@@ -504,25 +491,6 @@ func (s *SQLServerStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object
 		}
 	}
 
-	// Add values again for the UPDATE part of MERGE
-	for name, field := range obj.Fields {
-		if strings.ToLower(name) == "id" {
-			continue
-		}
-		schField, ok := tbl.Fields[name]
-		if !ok {
-			return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
-		}
-		if strings.ToLower(schField.DataType) == "json" {
-			jsonData, err := json.Marshal(field)
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
-			}
-			values = append(values, string(jsonData))
-		} else {
-			values = append(values, field)
-		}
-	}
 
 	// Use MERGE for UPSERT functionality
 	query := fmt.Sprintf(`
@@ -547,7 +515,13 @@ func (s *SQLServerStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object
 		}(),
 		strings.Join(updateClauses, ", "),
 		strings.Join(columns, ", "),
-		strings.Join(placeholders, ", "))
+		strings.Join(func() []string {
+			sourceCols := make([]string, len(columns))
+			for i, col := range columns {
+				sourceCols[i] = "source." + col
+			}
+			return sourceCols
+		}(), ", "))
 
 	storage.DebugLog(query, values...)
 	_, err = tx.ExecContext(ctx, query, values...)

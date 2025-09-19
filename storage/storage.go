@@ -40,7 +40,7 @@ func IsDebugEnabled() bool {
 }
 
 // DebugLog logs query information if debug mode is enabled
-func DebugLog(query string, args ...interface{}) {
+func DebugLog(query string, args ...any) {
 	if IsDebugEnabled() {
 		log.Printf("DEBUG SQL: %s | Args: %v", query, args)
 	}

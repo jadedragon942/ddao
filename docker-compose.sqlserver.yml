@@ -10,9 +10,11 @@ services:
     working_dir: /app
     environment:
       - CGO_ENABLED=1
-      - SQLSERVER_TEST_URL=sqlserver://ddao:ddao_Password123@sqlserver:1433?database=ddao_test
+      - DEBUG=1
+      - SQLSERVER_TEST_URL=sqlserver://sa:ddao_Password123@sqlserver:1433?database=ddao_test
     depends_on:
-      - sqlserver
+      sqlserver:
+        condition: service_healthy
     networks:
       - ddao-sqlserver-network
 
@@ -29,7 +31,7 @@ services:
     networks:
       - ddao-sqlserver-network
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ddao_Password123 -Q 'SELECT 1'"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P ddao_Password123 -C -Q 'SELECT 1'"]
       interval: 30s
       timeout: 10s
       retries: 5
