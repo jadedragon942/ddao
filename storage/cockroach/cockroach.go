@@ -15,16 +15,18 @@ import (
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
+	"github.com/jadedragon942/ddao/storage/common"
 )
 
 type CockroachDBStorage struct {
+	*common.BaseSQLStorage
 	pool *pgxpool.Pool
-	db   *sql.DB // For backward compatibility with sql.Tx interface
-	sch  *schema.Schema
 }
 
 func New() storage.Storage {
-	return &CockroachDBStorage{}
+	return &CockroachDBStorage{
+		BaseSQLStorage: common.NewBaseSQLStorage(),
+	}
 }
 
 func (s *CockroachDBStorage) Connect(ctx context.Context, connStr string) error {
@@ -35,7 +37,7 @@ func (s *CockroachDBStorage) Connect(ctx context.Context, connStr string) error 
 	s.pool = pool
 
 	// Also create a sql.DB instance for backward compatibility
-	s.db = stdlib.OpenDBFromPool(pool)
+	s.SetDB(stdlib.OpenDBFromPool(pool))
 	return nil
 }
 
@@ -80,7 +82,7 @@ func (s *CockroachDBStorage) CreateTables(ctx context.Context, schema *schema.Sc
 		}
 	}
 
-	s.sch = schema
+	s.SetSchema(schema)
 	log.Println("Tables created successfully")
 
 	return nil
@@ -122,11 +124,11 @@ func (s *CockroachDBStorage) Insert(ctx context.Context, obj *object.Object) ([]
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -183,7 +185,7 @@ func (s *CockroachDBStorage) Update(ctx context.Context, obj *object.Object) (bo
 		return false, errors.New("not connected")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -233,7 +235,7 @@ func (s *CockroachDBStorage) FindByKey(ctx context.Context, tblName, key, value 
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
@@ -378,22 +380,19 @@ func (s *CockroachDBStorage) DeleteByID(ctx context.Context, tblName, id string)
 }
 
 func (s *CockroachDBStorage) ResetConnection(ctx context.Context) error {
-	if s.db != nil {
-		s.db.Close()
-	}
 	if s.pool != nil {
 		s.pool.Close()
 	}
-	return nil
+	return s.BaseSQLStorage.ResetConnection(ctx)
 }
 
 // Transaction methods
 
 func (s *CockroachDBStorage) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, errors.New("not connected")
 	}
-	return s.db.BeginTx(ctx, nil)
+	return s.GetDB().BeginTx(ctx, nil)
 }
 
 func (s *CockroachDBStorage) CommitTx(tx *sql.Tx) error {
@@ -419,11 +418,11 @@ func (s *CockroachDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *obje
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -480,7 +479,7 @@ func (s *CockroachDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *obje
 		return false, errors.New("transaction is nil")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -528,7 +527,7 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}

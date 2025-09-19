@@ -12,16 +12,18 @@ import (
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
+	"github.com/jadedragon942/ddao/storage/common"
 	_ "github.com/microsoft/go-mssqldb"
 )
 
 type SQLServerStorage struct {
-	db  *sql.DB
-	sch *schema.Schema
+	*common.BaseSQLStorage
 }
 
 func New() storage.Storage {
-	return &SQLServerStorage{}
+	return &SQLServerStorage{
+		BaseSQLStorage: common.NewBaseSQLStorage(),
+	}
 }
 
 func (s *SQLServerStorage) Connect(ctx context.Context, connStr string) error {
@@ -34,12 +36,12 @@ func (s *SQLServerStorage) Connect(ctx context.Context, connStr string) error {
 		return err
 	}
 
-	s.db = db
+	s.SetDB(db)
 	return nil
 }
 
 func (s *SQLServerStorage) CreateTables(ctx context.Context, schema *schema.Schema) error {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return errors.New("not connected")
 	}
 
@@ -77,13 +79,13 @@ func (s *SQLServerStorage) CreateTables(ctx context.Context, schema *schema.Sche
 		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
-		_, err := s.db.ExecContext(ctx, createTableQuery)
+		_, err := s.GetDB().ExecContext(ctx, createTableQuery)
 		if err != nil {
 			return fmt.Errorf("failed to create table %s: %w", table.TableName, err)
 		}
 	}
 
-	s.sch = schema
+	s.SetSchema(schema)
 	log.Println("Tables created successfully")
 
 	return nil
@@ -117,7 +119,7 @@ func (s *SQLServerStorage) mapDataType(dataType string) string {
 }
 
 func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, false, errors.New("not connected")
 	}
 	data, err := json.Marshal(obj)
@@ -125,11 +127,11 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -213,7 +215,7 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 		strings.Join(placeholders, ", "))
 
 	storage.DebugLog(query, values...)
-	_, err = s.db.ExecContext(ctx, query, values...)
+	_, err = s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -222,11 +224,11 @@ func (s *SQLServerStorage) Insert(ctx context.Context, obj *object.Object) ([]by
 }
 
 func (s *SQLServerStorage) Update(ctx context.Context, obj *object.Object) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -247,7 +249,7 @@ func (s *SQLServerStorage) Update(ctx context.Context, obj *object.Object) (bool
 	query := fmt.Sprintf("UPDATE [%s] SET %s WHERE [id] = ?", tbl.TableName, strings.Join(setClauses, ", "))
 	storage.DebugLog(query, values...)
 
-	res, err := s.db.ExecContext(ctx, query, values...)
+	res, err := s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return false, err
 	}
@@ -279,7 +281,7 @@ func (s *SQLServerStorage) FindByKey(ctx context.Context, tblName, key, value st
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
@@ -340,7 +342,7 @@ func (s *SQLServerStorage) FindByKey(ctx context.Context, tblName, key, value st
 
 	storage.DebugLog(query, value)
 
-	row := s.db.QueryRowContext(ctx, query, value)
+	row := s.GetDB().QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -406,12 +408,12 @@ func (s *SQLServerStorage) FindByKey(ctx context.Context, tblName, key, value st
 }
 
 func (s *SQLServerStorage) DeleteByID(ctx context.Context, tblName, id string) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 	query := fmt.Sprintf(`DELETE FROM [%s] WHERE [id] = ?`, tblName)
 	storage.DebugLog(query, id)
-	res, err := s.db.ExecContext(ctx, query, id)
+	res, err := s.GetDB().ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
 	}
@@ -423,18 +425,18 @@ func (s *SQLServerStorage) DeleteByID(ctx context.Context, tblName, id string) (
 }
 
 func (s *SQLServerStorage) ResetConnection(ctx context.Context) error {
-	if s.db != nil {
-		return s.db.Close()
+	if s.GetDB() != nil {
+		return s.GetDB().Close()
 	}
 	return nil
 }
 
 // Transaction support methods
 func (s *SQLServerStorage) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, errors.New("not connected")
 	}
-	return s.db.BeginTx(ctx, nil)
+	return s.GetDB().BeginTx(ctx, nil)
 }
 
 func (s *SQLServerStorage) CommitTx(tx *sql.Tx) error {
@@ -460,11 +462,11 @@ func (s *SQLServerStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -561,7 +563,7 @@ func (s *SQLServerStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object
 		return false, errors.New("transaction is nil")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -607,7 +609,7 @@ func (s *SQLServerStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName,
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}

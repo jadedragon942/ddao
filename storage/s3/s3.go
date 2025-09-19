@@ -60,9 +60,6 @@ func New() storage.Storage {
 //   - "s3://my-bucket/ddao-data?region=us-east-1"
 //   - "s3://my-bucket/ddao-data?region=us-east-1&endpoint=http://localhost:9000" (for MinIO)
 func (s *S3Storage) Connect(ctx context.Context, connStr string) error {
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	// Parse connection string
 	u, err := url.Parse(connStr)
 	if err != nil {
@@ -125,9 +122,6 @@ func (s *S3Storage) Connect(ctx context.Context, connStr string) error {
 // CreateTables creates the necessary "table" structure in S3
 // For S3, this means creating metadata files for each table
 func (s *S3Storage) CreateTables(ctx context.Context, schema *schema.Schema) error {
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
 	if s.client == nil {
 		return errors.New("not connected to S3")
 	}
@@ -198,8 +192,6 @@ func (s *S3Storage) CreateTables(ctx context.Context, schema *schema.Schema) err
 
 // Insert creates a new object in S3
 func (s *S3Storage) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	if s.client == nil {
 		return nil, false, errors.New("not connected to S3")
@@ -269,8 +261,6 @@ func (s *S3Storage) Insert(ctx context.Context, obj *object.Object) ([]byte, boo
 
 // Update modifies an existing object in S3
 func (s *S3Storage) Update(ctx context.Context, obj *object.Object) (bool, error) {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	if s.client == nil {
 		return false, errors.New("not connected to S3")
@@ -342,8 +332,6 @@ func (s *S3Storage) UpsertTx(ctx context.Context, tx *sql.Tx, obj *object.Object
 
 // FindByID retrieves an object by its ID
 func (s *S3Storage) FindByID(ctx context.Context, tblName, id string) (*object.Object, error) {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	if s.client == nil {
 		return nil, errors.New("not connected to S3")
@@ -394,8 +382,6 @@ func (s *S3Storage) FindByID(ctx context.Context, tblName, id string) (*object.O
 
 // FindByKey searches for objects by a specific field value
 func (s *S3Storage) FindByKey(ctx context.Context, tblName, key, value string) (*object.Object, error) {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	if s.client == nil {
 		return nil, errors.New("not connected to S3")
@@ -465,8 +451,6 @@ func (s *S3Storage) FindByKey(ctx context.Context, tblName, key, value string) (
 
 // DeleteByID removes an object by its ID
 func (s *S3Storage) DeleteByID(ctx context.Context, tblName, id string) (bool, error) {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	if s.client == nil {
 		return false, errors.New("not connected to S3")
@@ -507,8 +491,6 @@ func (s *S3Storage) DeleteByID(ctx context.Context, tblName, id string) (bool, e
 
 // ResetConnection closes the S3 connection
 func (s *S3Storage) ResetConnection(ctx context.Context) error {
-	s.sch.Lock()
-	defer s.sch.Unlock()
 
 	s.client = nil
 	s.uploader = nil

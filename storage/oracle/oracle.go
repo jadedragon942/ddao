@@ -12,16 +12,18 @@ import (
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
+	"github.com/jadedragon942/ddao/storage/common"
 	_ "github.com/godror/godror"
 )
 
 type OracleStorage struct {
-	db  *sql.DB
-	sch *schema.Schema
+	*common.BaseSQLStorage
 }
 
 func New() storage.Storage {
-	return &OracleStorage{}
+	return &OracleStorage{
+		BaseSQLStorage: common.NewBaseSQLStorage(),
+	}
 }
 
 func (s *OracleStorage) Connect(ctx context.Context, connStr string) error {
@@ -34,12 +36,12 @@ func (s *OracleStorage) Connect(ctx context.Context, connStr string) error {
 		return err
 	}
 
-	s.db = db
+	s.SetDB(db)
 	return nil
 }
 
 func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema) error {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return errors.New("not connected")
 	}
 
@@ -48,7 +50,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 		var count int
 		checkQuery := "SELECT COUNT(*) FROM user_tables WHERE table_name = UPPER(?)"
 		storage.DebugLog(checkQuery, table.TableName)
-		err := s.db.QueryRowContext(ctx, checkQuery, table.TableName).Scan(&count)
+		err := s.GetDB().QueryRowContext(ctx, checkQuery, table.TableName).Scan(&count)
 		if err != nil {
 			return fmt.Errorf("failed to check if table exists: %w", err)
 		}
@@ -86,7 +88,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
-		_, err = s.db.ExecContext(ctx, createTableQuery)
+		_, err = s.GetDB().ExecContext(ctx, createTableQuery)
 		if err != nil {
 			return fmt.Errorf("failed to create table %s: %w", table.TableName, err)
 		}
@@ -98,7 +100,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 				uniqueQuery := fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s UNIQUE (%s)",
 					strings.ToUpper(table.TableName), constraintName, strings.ToUpper(field.Name))
 				storage.DebugLog(uniqueQuery)
-				_, err = s.db.ExecContext(ctx, uniqueQuery)
+				_, err = s.GetDB().ExecContext(ctx, uniqueQuery)
 				if err != nil {
 					log.Printf("Warning: failed to create unique constraint for %s.%s: %v", table.TableName, field.Name, err)
 				}
@@ -106,7 +108,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 		}
 	}
 
-	s.sch = schema
+	s.SetSchema(schema)
 	log.Println("Tables created successfully")
 
 	return nil
@@ -140,7 +142,7 @@ func (s *OracleStorage) mapDataType(dataType string) string {
 }
 
 func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, false, errors.New("not connected")
 	}
 	data, err := json.Marshal(obj)
@@ -148,11 +150,11 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -256,7 +258,7 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 		strings.Join(placeholders, ", "))
 
 	storage.DebugLog(query, values...)
-	_, err = s.db.ExecContext(ctx, query, values...)
+	_, err = s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -265,11 +267,11 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 }
 
 func (s *OracleStorage) Update(ctx context.Context, obj *object.Object) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -307,7 +309,7 @@ func (s *OracleStorage) Update(ctx context.Context, obj *object.Object) (bool, e
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE ID = :%d", strings.ToUpper(tbl.TableName), strings.Join(setClauses, ", "), paramIndex)
 	storage.DebugLog(query, values...)
 
-	res, err := s.db.ExecContext(ctx, query, values...)
+	res, err := s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return false, err
 	}
@@ -339,7 +341,7 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
@@ -400,7 +402,7 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 
 	storage.DebugLog(query, value)
 
-	row := s.db.QueryRowContext(ctx, query, value)
+	row := s.GetDB().QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -468,12 +470,12 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 }
 
 func (s *OracleStorage) DeleteByID(ctx context.Context, tblName, id string) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 	query := fmt.Sprintf("DELETE FROM %s WHERE ID = :1", strings.ToUpper(tblName))
 	storage.DebugLog(query, id)
-	res, err := s.db.ExecContext(ctx, query, id)
+	res, err := s.GetDB().ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
 	}
@@ -485,18 +487,18 @@ func (s *OracleStorage) DeleteByID(ctx context.Context, tblName, id string) (boo
 }
 
 func (s *OracleStorage) ResetConnection(ctx context.Context) error {
-	if s.db != nil {
-		return s.db.Close()
+	if s.GetDB() != nil {
+		return s.GetDB().Close()
 	}
 	return nil
 }
 
 // Transaction support methods
 func (s *OracleStorage) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, errors.New("not connected")
 	}
-	return s.db.BeginTx(ctx, nil)
+	return s.GetDB().BeginTx(ctx, nil)
 }
 
 func (s *OracleStorage) CommitTx(tx *sql.Tx) error {
@@ -522,11 +524,11 @@ func (s *OracleStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -643,7 +645,7 @@ func (s *OracleStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 		return false, errors.New("transaction is nil")
 	}
 
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -706,7 +708,7 @@ func (s *OracleStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, ke
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}

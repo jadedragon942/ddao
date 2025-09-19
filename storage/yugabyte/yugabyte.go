@@ -12,16 +12,18 @@ import (
 	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 	"github.com/jadedragon942/ddao/storage"
+	"github.com/jadedragon942/ddao/storage/common"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type YugabyteDBStorage struct {
-	db  *sql.DB
-	sch *schema.Schema
+	*common.BaseSQLStorage
 }
 
 func New() storage.Storage {
-	return &YugabyteDBStorage{}
+	return &YugabyteDBStorage{
+		BaseSQLStorage: common.NewBaseSQLStorage(),
+	}
 }
 
 func (s *YugabyteDBStorage) Connect(ctx context.Context, connStr string) error {
@@ -29,12 +31,12 @@ func (s *YugabyteDBStorage) Connect(ctx context.Context, connStr string) error {
 	if err != nil {
 		return err
 	}
-	s.db = db
+	s.SetDB(db)
 	return nil
 }
 
 func (s *YugabyteDBStorage) CreateTables(ctx context.Context, schema *schema.Schema) error {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return errors.New("not connected")
 	}
 
@@ -68,13 +70,13 @@ func (s *YugabyteDBStorage) CreateTables(ctx context.Context, schema *schema.Sch
 		storage.DebugLog(createTableQuery)
 		log.Printf("Creating table %s with query: %s", table.TableName, createTableQuery)
 
-		_, err := s.db.ExecContext(ctx, createTableQuery)
+		_, err := s.GetDB().ExecContext(ctx, createTableQuery)
 		if err != nil {
 			return fmt.Errorf("failed to create table %s: %w", table.TableName, err)
 		}
 	}
 
-	s.sch = schema
+	s.SetSchema(schema)
 	log.Println("Tables created successfully")
 
 	return nil
@@ -108,7 +110,7 @@ func (s *YugabyteDBStorage) mapDataType(dataType string) string {
 }
 
 func (s *YugabyteDBStorage) Insert(ctx context.Context, obj *object.Object) ([]byte, bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, false, errors.New("not connected")
 	}
 	data, err := json.Marshal(obj)
@@ -116,14 +118,11 @@ func (s *YugabyteDBStorage) Insert(ctx context.Context, obj *object.Object) ([]b
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -168,7 +167,7 @@ func (s *YugabyteDBStorage) Insert(ctx context.Context, obj *object.Object) ([]b
 		s.buildUpdateClause(columns, placeholders))
 
 	storage.DebugLog(query, values...)
-	_, err = s.db.ExecContext(ctx, query, values...)
+	_, err = s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return nil, false, err
 	}
@@ -185,14 +184,11 @@ func (s *YugabyteDBStorage) buildUpdateClause(columns, placeholders []string) st
 }
 
 func (s *YugabyteDBStorage) Update(ctx context.Context, obj *object.Object) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -215,7 +211,7 @@ func (s *YugabyteDBStorage) Update(ctx context.Context, obj *object.Object) (boo
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d", tbl.TableName, strings.Join(setClauses, ", "), paramIndex)
 	storage.DebugLog(query, values...)
 
-	res, err := s.db.ExecContext(ctx, query, values...)
+	res, err := s.GetDB().ExecContext(ctx, query, values...)
 	if err != nil {
 		return false, err
 	}
@@ -247,10 +243,7 @@ func (s *YugabyteDBStorage) FindByKey(ctx context.Context, tblName, key, value s
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
@@ -314,7 +307,7 @@ func (s *YugabyteDBStorage) FindByKey(ctx context.Context, tblName, key, value s
 
 	storage.DebugLog(query, value)
 
-	row := s.db.QueryRowContext(ctx, query, value)
+	row := s.GetDB().QueryRowContext(ctx, query, value)
 	if err := row.Scan(columnPointers...); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -326,12 +319,12 @@ func (s *YugabyteDBStorage) FindByKey(ctx context.Context, tblName, key, value s
 }
 
 func (s *YugabyteDBStorage) DeleteByID(ctx context.Context, tblName, id string) (bool, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return false, errors.New("not connected")
 	}
 	query := `DELETE FROM ` + tblName + ` WHERE id = $1`
 	storage.DebugLog(query, id)
-	res, err := s.db.ExecContext(ctx, query, id)
+	res, err := s.GetDB().ExecContext(ctx, query, id)
 	if err != nil {
 		return false, err
 	}
@@ -343,8 +336,8 @@ func (s *YugabyteDBStorage) DeleteByID(ctx context.Context, tblName, id string) 
 }
 
 func (s *YugabyteDBStorage) ResetConnection(ctx context.Context) error {
-	if s.db != nil {
-		return s.db.Close()
+	if s.GetDB() != nil {
+		return s.GetDB().Close()
 	}
 	return nil
 }
@@ -352,10 +345,10 @@ func (s *YugabyteDBStorage) ResetConnection(ctx context.Context) error {
 // Transaction methods
 
 func (s *YugabyteDBStorage) BeginTx(ctx context.Context) (*sql.Tx, error) {
-	if s.db == nil {
+	if err := s.ValidateConnection(); err != nil {
 		return nil, errors.New("not connected")
 	}
-	return s.db.BeginTx(ctx, nil)
+	return s.GetDB().BeginTx(ctx, nil)
 }
 
 func (s *YugabyteDBStorage) CommitTx(tx *sql.Tx) error {
@@ -381,14 +374,11 @@ func (s *YugabyteDBStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *objec
 		return nil, false, err
 	}
 
-	if s.sch == nil {
+	if err := s.ValidateSchema(); err != nil {
 		return nil, false, errors.New("schema not initialized")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return nil, false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -446,10 +436,7 @@ func (s *YugabyteDBStorage) UpdateTx(ctx context.Context, tx *sql.Tx, obj *objec
 		return false, errors.New("transaction is nil")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(obj.TableName)
+	tbl, ok := s.GetSchema().GetTable(obj.TableName)
 	if !ok {
 		return false, fmt.Errorf("table %s not found in schema", obj.TableName)
 	}
@@ -497,10 +484,7 @@ func (s *YugabyteDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName
 		return nil, errors.New("table name, key, and value must not be empty")
 	}
 
-	s.sch.Lock()
-	defer s.sch.Unlock()
-
-	tbl, ok := s.sch.GetTable(tblName)
+	tbl, ok := s.GetSchema().GetTable(tblName)
 	if !ok {
 		return nil, fmt.Errorf("table %s not found in schema", tblName)
 	}
