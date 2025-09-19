@@ -14,12 +14,12 @@ import (
 
 // LDAPEntry represents an LDAP directory entry
 type LDAPEntry struct {
-	DN          string            `json:"dn"`
-	ParentDN    string            `json:"parent_dn,omitempty"`
-	ObjectClass string            `json:"object_class"`
-	Attributes  string            `json:"attributes"`
-	CreatedAt   string            `json:"created_at"`
-	UpdatedAt   string            `json:"updated_at,omitempty"`
+	DN          string `json:"dn"`
+	ParentDN    string `json:"parent_dn,omitempty"`
+	ObjectClass string `json:"object_class"`
+	Attributes  string `json:"attributes"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
 }
 
 // LDAPUser represents a user for authentication
@@ -241,33 +241,6 @@ func (s *LDAPServer) authenticateUser(dn, password string) (bool, error) {
 	}
 
 	return false, nil
-}
-
-func (s *LDAPServer) addToGroup(groupDN, memberDN string) error {
-	ctx := context.Background()
-
-	// Generate group membership ID
-	id := fmt.Sprintf("%s:%s", groupDN, memberDN)
-
-	group := object.New()
-	group.TableName = "groups"
-	group.ID = id
-	group.Fields = map[string]any{
-		"group_dn":   groupDN,
-		"member_dn":  memberDN,
-		"created_at": time.Now().Format(time.RFC3339),
-	}
-
-	_, created, err := s.orm.Insert(ctx, group)
-	if err != nil {
-		return fmt.Errorf("failed to add to group: %w", err)
-	}
-
-	if !created {
-		return fmt.Errorf("membership already exists")
-	}
-
-	return nil
 }
 
 // Helper functions

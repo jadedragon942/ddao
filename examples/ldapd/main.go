@@ -16,6 +16,7 @@ import (
 func main() {
 	var (
 		port       = flag.Int("port", 389, "LDAP server port")
+		webPort    = flag.Int("web-port", 8080, "Web interface port")
 		dbPath     = flag.String("db", "ldap.db", "Database file path")
 		bindDN     = flag.String("bind-dn", "cn=admin,dc=example,dc=com", "Bind DN for admin user")
 		bindPW     = flag.String("bind-pw", "admin", "Bind password for admin user")
@@ -55,7 +56,10 @@ func main() {
 		log.Fatalf("Failed to setup initial data: %v", err)
 	}
 
-	// Start server
+	// Initialize web server
+	webServer := NewWebServer(server, *webPort)
+
+	// Start LDAP server
 	go func() {
 		log.Printf("Starting LDAP server on port %d", *port)
 		log.Printf("Base DN: %s", *baseDN)
@@ -65,12 +69,20 @@ func main() {
 		}
 	}()
 
+	// Start web server
+	go func() {
+		log.Printf("Starting web interface on port %d", *webPort)
+		if err := webServer.Start(); err != nil {
+			log.Fatalf("Failed to start web server: %v", err)
+		}
+	}()
+
 	// Wait for interrupt signal
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
-	log.Println("Shutting down LDAP server...")
+	log.Println("Shutting down servers...")
 	server.Stop()
-	fmt.Println("Server stopped")
+	fmt.Println("Servers stopped")
 }
