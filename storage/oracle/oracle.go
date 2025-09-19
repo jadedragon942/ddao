@@ -48,7 +48,7 @@ func (s *OracleStorage) CreateTables(ctx context.Context, schema *schema.Schema)
 	for _, table := range schema.Tables {
 		// Check if table exists
 		var count int
-		checkQuery := "SELECT COUNT(*) FROM user_tables WHERE table_name = UPPER(?)"
+		checkQuery := "SELECT COUNT(*) FROM user_tables WHERE table_name = UPPER(:1)"
 		storage.DebugLog(checkQuery, table.TableName)
 		err := s.GetDB().QueryRowContext(ctx, checkQuery, table.TableName).Scan(&count)
 		if err != nil {
@@ -176,7 +176,7 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 
 		columns = append(columns, strings.ToUpper(name))
 		placeholders = append(placeholders, fmt.Sprintf(":%d", paramIndex))
-		updateClauses = append(updateClauses, fmt.Sprintf("%s = :%d", strings.ToUpper(name), paramIndex+len(obj.Fields)))
+		updateClauses = append(updateClauses, fmt.Sprintf("%s = source.%s", strings.ToUpper(name), strings.ToUpper(name)))
 
 		schField, ok := tbl.Fields[name]
 		if !ok {
@@ -205,62 +205,68 @@ func (s *OracleStorage) Insert(ctx context.Context, obj *object.Object) ([]byte,
 		paramIndex++
 	}
 
-	// Add values again for the UPDATE part of MERGE
-	for name, field := range obj.Fields {
-		if strings.ToLower(name) == "id" {
-			continue
-		}
-		schField, ok := tbl.Fields[name]
-		if !ok {
-			return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
-		}
-		if strings.ToLower(schField.DataType) == "json" {
-			jsonData, err := json.Marshal(field)
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
-			}
-			values = append(values, string(jsonData))
-		} else if strings.ToLower(schField.DataType) == "boolean" {
-			// Convert boolean to number for Oracle
-			if boolVal, ok := field.(bool); ok {
-				if boolVal {
-					values = append(values, 1)
-				} else {
-					values = append(values, 0)
-				}
-			} else {
-				values = append(values, field)
-			}
-		} else {
-			values = append(values, field)
-		}
-	}
-
-	// Use MERGE for UPSERT functionality
-	query := fmt.Sprintf(`
-		MERGE INTO %s target
-		USING (SELECT %s FROM dual) source
-		ON (target.ID = source.ID)
-		WHEN MATCHED THEN
-			UPDATE SET %s
-		WHEN NOT MATCHED THEN
-			INSERT (%s) VALUES (%s)`,
+	// Try INSERT first, if it fails due to unique constraint, do UPDATE
+	insertQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		strings.ToUpper(tbl.TableName),
-		func() string {
-			selectParts := make([]string, 0, len(columns))
-			for i, col := range columns {
-				selectParts = append(selectParts, fmt.Sprintf("%s AS %s", placeholders[i], col))
-			}
-			return strings.Join(selectParts, ", ")
-		}(),
-		strings.Join(updateClauses, ", "),
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	storage.DebugLog(query, values...)
-	_, err = s.GetDB().ExecContext(ctx, query, values...)
+	storage.DebugLog(insertQuery, values...)
+	_, err = s.GetDB().ExecContext(ctx, insertQuery, values...)
 	if err != nil {
-		return nil, false, err
+		// If insert failed due to unique constraint, try update
+		if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(strings.ToLower(err.Error()), "ora-00001") {
+			// Remove ID from update
+			updateColumns := make([]string, 0, len(updateClauses))
+			updateValues := make([]any, 0, len(values)-1)
+			updateParamIndex := 1
+
+			for name, field := range obj.Fields {
+				if strings.ToLower(name) == "id" {
+					continue
+				}
+				updateColumns = append(updateColumns, fmt.Sprintf("%s = :%d", strings.ToUpper(name), updateParamIndex))
+
+				schField, ok := tbl.Fields[name]
+				if !ok {
+					return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
+				}
+				if strings.ToLower(schField.DataType) == "json" {
+					jsonData, err := json.Marshal(field)
+					if err != nil {
+						return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
+					}
+					updateValues = append(updateValues, string(jsonData))
+				} else if strings.ToLower(schField.DataType) == "boolean" {
+					if boolVal, ok := field.(bool); ok {
+						if boolVal {
+							updateValues = append(updateValues, 1)
+						} else {
+							updateValues = append(updateValues, 0)
+						}
+					} else {
+						updateValues = append(updateValues, field)
+					}
+				} else {
+					updateValues = append(updateValues, field)
+				}
+				updateParamIndex++
+			}
+
+			updateValues = append(updateValues, obj.ID)
+			updateQuery := fmt.Sprintf("UPDATE %s SET %s WHERE ID = :%d",
+				strings.ToUpper(tbl.TableName),
+				strings.Join(updateColumns, ", "),
+				updateParamIndex)
+
+			storage.DebugLog(updateQuery, updateValues...)
+			_, err = s.GetDB().ExecContext(ctx, updateQuery, updateValues...)
+			if err != nil {
+				return nil, false, err
+			}
+		} else {
+			return nil, false, err
+		}
 	}
 
 	return data, true, nil
@@ -398,7 +404,16 @@ func (s *OracleStorage) FindByKey(ctx context.Context, tblName, key, value strin
 		}
 	}
 
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = :1", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), strings.ToUpper(key))
+	// Handle CLOB comparison for text fields
+	var whereClause string
+	keyField, keyExists := tbl.Fields[key]
+	if keyExists && (strings.ToUpper(keyField.DataType) == "TEXT" || strings.ToUpper(keyField.DataType) == "VARCHAR" || strings.ToUpper(keyField.DataType) == "CHAR") {
+		whereClause = fmt.Sprintf("DBMS_LOB.COMPARE(%s, :1) = 0", strings.ToUpper(key))
+	} else {
+		whereClause = fmt.Sprintf("%s = :1", strings.ToUpper(key))
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), whereClause)
 
 	storage.DebugLog(query, value)
 
@@ -550,7 +565,7 @@ func (s *OracleStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 
 		columns = append(columns, strings.ToUpper(name))
 		placeholders = append(placeholders, fmt.Sprintf(":%d", paramIndex))
-		updateClauses = append(updateClauses, fmt.Sprintf("%s = :%d", strings.ToUpper(name), paramIndex+len(obj.Fields)))
+		updateClauses = append(updateClauses, fmt.Sprintf("%s = source.%s", strings.ToUpper(name), strings.ToUpper(name)))
 
 		schField, ok := tbl.Fields[name]
 		if !ok {
@@ -579,62 +594,69 @@ func (s *OracleStorage) InsertTx(ctx context.Context, tx *sql.Tx, obj *object.Ob
 		paramIndex++
 	}
 
-	// Add values again for the UPDATE part of MERGE
-	for name, field := range obj.Fields {
-		if strings.ToLower(name) == "id" {
-			continue
-		}
-		schField, ok := tbl.Fields[name]
-		if !ok {
-			return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
-		}
-		if strings.ToLower(schField.DataType) == "json" {
-			jsonData, err := json.Marshal(field)
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
-			}
-			values = append(values, string(jsonData))
-		} else if strings.ToLower(schField.DataType) == "boolean" {
-			// Convert boolean to number for Oracle
-			if boolVal, ok := field.(bool); ok {
-				if boolVal {
-					values = append(values, 1)
-				} else {
-					values = append(values, 0)
-				}
-			} else {
-				values = append(values, field)
-			}
-		} else {
-			values = append(values, field)
-		}
-	}
 
-	// Use MERGE for UPSERT functionality
-	query := fmt.Sprintf(`
-		MERGE INTO %s target
-		USING (SELECT %s FROM dual) source
-		ON (target.ID = source.ID)
-		WHEN MATCHED THEN
-			UPDATE SET %s
-		WHEN NOT MATCHED THEN
-			INSERT (%s) VALUES (%s)`,
+	// Try INSERT first, if it fails due to unique constraint, do UPDATE
+	insertQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		strings.ToUpper(tbl.TableName),
-		func() string {
-			selectParts := make([]string, 0, len(columns))
-			for i, col := range columns {
-				selectParts = append(selectParts, fmt.Sprintf("%s AS %s", placeholders[i], col))
-			}
-			return strings.Join(selectParts, ", ")
-		}(),
-		strings.Join(updateClauses, ", "),
 		strings.Join(columns, ", "),
 		strings.Join(placeholders, ", "))
 
-	storage.DebugLog(query, values...)
-	_, err = tx.ExecContext(ctx, query, values...)
+	storage.DebugLog(insertQuery, values...)
+	_, err = tx.ExecContext(ctx, insertQuery, values...)
 	if err != nil {
-		return nil, false, err
+		// If insert failed due to unique constraint, try update
+		if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(strings.ToLower(err.Error()), "ora-00001") {
+			// Remove ID from update
+			updateColumns := make([]string, 0, len(updateClauses))
+			updateValues := make([]any, 0, len(values)-1)
+			updateParamIndex := 1
+
+			for name, field := range obj.Fields {
+				if strings.ToLower(name) == "id" {
+					continue
+				}
+				updateColumns = append(updateColumns, fmt.Sprintf("%s = :%d", strings.ToUpper(name), updateParamIndex))
+
+				schField, ok := tbl.Fields[name]
+				if !ok {
+					return nil, false, fmt.Errorf("field %s not found in table %s schema", name, tbl.TableName)
+				}
+				if strings.ToLower(schField.DataType) == "json" {
+					jsonData, err := json.Marshal(field)
+					if err != nil {
+						return nil, false, fmt.Errorf("failed to marshal JSON field %s: %w", name, err)
+					}
+					updateValues = append(updateValues, string(jsonData))
+				} else if strings.ToLower(schField.DataType) == "boolean" {
+					if boolVal, ok := field.(bool); ok {
+						if boolVal {
+							updateValues = append(updateValues, 1)
+						} else {
+							updateValues = append(updateValues, 0)
+						}
+					} else {
+						updateValues = append(updateValues, field)
+					}
+				} else {
+					updateValues = append(updateValues, field)
+				}
+				updateParamIndex++
+			}
+
+			updateValues = append(updateValues, obj.ID)
+			updateQuery := fmt.Sprintf("UPDATE %s SET %s WHERE ID = :%d",
+				strings.ToUpper(tbl.TableName),
+				strings.Join(updateColumns, ", "),
+				updateParamIndex)
+
+			storage.DebugLog(updateQuery, updateValues...)
+			_, err = tx.ExecContext(ctx, updateQuery, updateValues...)
+			if err != nil {
+				return nil, false, err
+			}
+		} else {
+			return nil, false, err
+		}
 	}
 
 	return data, true, nil
@@ -765,7 +787,16 @@ func (s *OracleStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblName, ke
 		}
 	}
 
-	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = :1", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), strings.ToUpper(key))
+	// Handle CLOB comparison for text fields
+	var whereClause string
+	keyField, keyExists := tbl.Fields[key]
+	if keyExists && (strings.ToUpper(keyField.DataType) == "TEXT" || strings.ToUpper(keyField.DataType) == "VARCHAR" || strings.ToUpper(keyField.DataType) == "CHAR") {
+		whereClause = fmt.Sprintf("DBMS_LOB.COMPARE(%s, :1) = 0", strings.ToUpper(key))
+	} else {
+		whereClause = fmt.Sprintf("%s = :1", strings.ToUpper(key))
+	}
+
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s", strings.Join(columns, ", "), strings.ToUpper(tbl.TableName), whereClause)
 
 	storage.DebugLog(query, value)
 

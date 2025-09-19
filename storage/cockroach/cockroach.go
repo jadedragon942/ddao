@@ -576,11 +576,7 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 			columnPointer := new(bool)
 			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
-		case "JSON":
-			columnPointer := new(string)
-			columnPointers = append(columnPointers, columnPointer)
-			obj.Fields[field.Name] = columnPointer
-		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
+		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML", "JSON":
 			columnPointer := new(string)
 			columnPointers = append(columnPointers, columnPointer)
 			obj.Fields[field.Name] = columnPointer
@@ -642,10 +638,7 @@ func (s *CockroachDBStorage) FindByKeyTx(ctx context.Context, tx *sql.Tx, tblNam
 		case "BOOLEAN":
 			ptr := columnPointers[i].(*bool)
 			obj.Fields[field.Name] = *ptr
-		case "JSON":
-			ptr := columnPointers[i].(*string)
-			obj.Fields[field.Name] = *ptr
-		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML":
+		case "DATETIME", "TIMESTAMP", "DATE", "TIME", "UUID", "CLOB", "XML", "JSON":
 			ptr := columnPointers[i].(*string)
 			obj.Fields[field.Name] = *ptr
 			// Set ID field

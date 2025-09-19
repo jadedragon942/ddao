@@ -10,9 +10,22 @@ RUN apt-get update && apt-get install -y \
     libaio-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create symlink for libaio.so.1
-RUN ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1 /usr/lib/x86_64-linux-gnu/libaio.so.1 || \
-    find /usr -name "libaio.so*" -exec ln -sf {} /usr/lib/x86_64-linux-gnu/libaio.so.1 \;
+# Debug and fix libaio.so.1 symlink issue
+RUN echo "=== Debugging libaio files ===" && \
+    find /usr -name "*libaio*" -type f -ls && \
+    echo "=== Creating proper symlinks ===" && \
+    LIBAIO_LIB=$(find /usr -name "libaio.so.*" -type f | head -1) && \
+    echo "Found libaio library: $LIBAIO_LIB" && \
+    if [ -n "$LIBAIO_LIB" ]; then \
+        ln -sf "$LIBAIO_LIB" /usr/lib/x86_64-linux-gnu/libaio.so.1 && \
+        ln -sf "$LIBAIO_LIB" /usr/lib/libaio.so.1 && \
+        echo "Created symlinks:" && \
+        ls -la /usr/lib/x86_64-linux-gnu/libaio.so.1 && \
+        ls -la /usr/lib/libaio.so.1; \
+    else \
+        echo "ERROR: No libaio library found"; \
+        exit 1; \
+    fi
 
 # Install Oracle Instant Client
 RUN wget https://download.oracle.com/otn_software/linux/instantclient/1923000/instantclient-basic-linux.x64-19.23.0.0.0dbru.zip && \
@@ -28,6 +41,6 @@ RUN go mod download
 
 COPY . .
 
-ENV ORACLE_TEST_URL="oracle://ddao:ddao_password@oracle:1521/XE"
+ENV ORACLE_TEST_URL="oracle://ddao:ddao_password@oracle:1521/XEPDB1"
 
 CMD ["go", "test", "-v", "./storage/oracle", "./object", "./orm", "./schema"]
