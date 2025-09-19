@@ -10,9 +10,10 @@ services:
     working_dir: /app
     environment:
       - CGO_ENABLED=1
-      - ORACLE_TEST_URL=oracle://ddao:ddao_password@oracle:1521/XE
+      - ORACLE_TEST_URL=oracle://ddao:ddao_password@oracle:1521/XEPDB1
     depends_on:
-      - oracle
+      oracle:
+        condition: service_healthy
     networks:
       - ddao-oracle-network
 
@@ -33,6 +34,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 60s
 
 volumes:
   oracle_data:
