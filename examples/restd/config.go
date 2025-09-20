@@ -6,8 +6,10 @@ import (
 
 	"github.com/jadedragon942/ddao/storage"
 	"github.com/jadedragon942/ddao/storage/cockroach"
+	"github.com/jadedragon942/ddao/storage/oracle"
 	"github.com/jadedragon942/ddao/storage/postgres"
 	"github.com/jadedragon942/ddao/storage/sqlite"
+	"github.com/jadedragon942/ddao/storage/sqlserver"
 	"github.com/jadedragon942/ddao/storage/tidb"
 	"github.com/jadedragon942/ddao/storage/yugabyte"
 )
@@ -15,18 +17,20 @@ import (
 type StorageEngine string
 
 const (
-	SQLite     StorageEngine = "sqlite"
-	PostgreSQL StorageEngine = "postgres"
+	SQLite      StorageEngine = "sqlite"
+	PostgreSQL  StorageEngine = "postgres"
 	CockroachDB StorageEngine = "cockroach"
-	YugabyteDB StorageEngine = "yugabyte"
-	TiDB       StorageEngine = "tidb"
+	YugabyteDB  StorageEngine = "yugabyte"
+	TiDB        StorageEngine = "tidb"
+	SQLServer   StorageEngine = "sqlserver"
+	Oracle      StorageEngine = "oracle"
 )
 
 type Config struct {
-	Port           int    `help:"Port to listen on" short:"p" default:"8080"`
-	StorageEngine  string `help:"Storage engine to use (sqlite, postgres, cockroach, yugabyte, tidb)" short:"s" default:"sqlite"`
-	ConnectionURL  string `help:"Database connection URL" short:"c" default:"restd.db"`
-	DatabaseName   string `help:"Database name" short:"d" default:"restd"`
+	Port          int    `help:"Port to listen on" short:"p" default:"8080"`
+	StorageEngine string `help:"Storage engine to use (sqlite, postgres, cockroach, yugabyte, tidb)" short:"s" default:"sqlite"`
+	ConnectionURL string `help:"Database connection URL" short:"c" default:"restd.db"`
+	DatabaseName  string `help:"Database name" short:"d" default:"restd"`
 }
 
 type StorageFactory struct{}
@@ -43,6 +47,10 @@ func (sf *StorageFactory) CreateStorage(engine StorageEngine, connectionURL stri
 		return yugabyte.New(), nil
 	case TiDB:
 		return tidb.New(), nil
+	case SQLServer:
+		return sqlserver.New(), nil
+	case Oracle:
+		return oracle.New(), nil
 	default:
 		return nil, fmt.Errorf("unsupported storage engine: %s", engine)
 	}

@@ -250,23 +250,6 @@ func performCRUDOperations(ctx context.Context, orm *orm.ORM) {
 
 DDAO provides a complete Docker setup for easy development and testing with all supported databases.
 
-### Quick Start with Docker
-
-```bash
-# Clone the repository
-git clone https://github.com/jadedragon942/ddao.git
-cd ddao
-
-# Start all databases
-docker-compose up -d
-
-# Run tests against all databases
-./docker/scripts/run-tests.sh --test
-
-# Stop and cleanup
-./docker/scripts/run-tests.sh --cleanup
-```
-
 ### Available Services
 
 The Docker setup includes:
