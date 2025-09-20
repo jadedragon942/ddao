@@ -269,8 +269,6 @@ POSTGRES_TEST_URL="postgres://ddao_user:ddao_password@localhost:5432/ddao_test?s
 MYSQL_TEST_URL="ddao_user:ddao_password@tcp(localhost:3306)/ddao_test"
 ```
 
-See [docker/README.md](docker/README.md) for detailed Docker setup and configuration.
-
 ## 🗄 Database-Specific Usage
 
 ### SQLite
@@ -472,21 +470,6 @@ go test -v ./storage/sqlite/
 ```
 
 ### Running Tests with Local Databases
-
-#### Quick Start with Docker Compose
-
-DDAO includes a comprehensive Docker setup for testing with all databases:
-
-```bash
-# Start all databases and run tests
-./docker/scripts/run-tests.sh --test --cleanup
-
-# Start specific databases
-./docker/scripts/run-tests.sh --services "sqlserver oracle" --test
-
-# Just start databases (for development)
-docker-compose up -d
-```
 
 #### Manual Docker Setup
 
