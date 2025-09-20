@@ -83,7 +83,7 @@ DDAO consists of four main components:
 │    ORM      │────│   Object    │────│   Schema    │────│   Storage   │
 │             │    │             │    │             │    │             │
 │ High-level  │    │ Data model  │    │ Table def   │    │ DB backends │
-│ operations  │    │ with fields │    │ with types  │    │ (8 drivers) │
+│ operations  │    │ with fields │    │ with types  │    │             │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
