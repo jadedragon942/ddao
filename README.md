@@ -501,8 +501,6 @@ docker run --name tidb-server -d -p 4000:4000 pingcap/tidb:latest
 go test ./storage/tidb/ -run TestTiDBLocal
 ```
 
-See [docker/README.md](docker/README.md) for detailed Docker setup instructions.
-
 ### Custom Tests
 
 You can use the `storagetest` package to test your own storage implementations:
