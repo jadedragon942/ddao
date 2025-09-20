@@ -59,7 +59,7 @@ go get github.com/microsoft/go-mssqldb
 go get github.com/godror/godror
 
 # CockroachDB (included)
-go get github.com/lib/pq
+go get github.com/jackc/pgx/v5
 
 # YugabyteDB (included)
 go get github.com/jackc/pgx/v5
