@@ -1,6 +1,6 @@
 # Database Administration Tool
 
-A simple web-based database administration tool that supports all DDAO storage adapters. This tool provides a user-friendly interface for managing database schemas and performing ALTER TABLE operations.
+A simple web-based database administration tool that supports all DDAO storage adapters. This tool provides a user-friendly interface for connecting to databases, managing database schemas, and performing ALTER TABLE operations.
 
 ## Features
 
@@ -15,9 +15,11 @@ A simple web-based database administration tool that supports all DDAO storage a
   - ScyllaDB/Cassandra
   - Amazon S3
 
+- **DSN Connection Screen**: Web-based interface for connecting to any storage adapter with interactive examples
 - **Schema Management**: View database tables and their field definitions
 - **ALTER TABLE Support**: Add new columns to existing tables through a simple web interface
-- **Simple UI**: Clean, responsive HTML/CSS interface with no JavaScript dependencies
+- **Dynamic Connection**: Connect and disconnect from different storage adapters without restarting
+- **Simple UI**: Clean, responsive HTML/CSS interface with minimal JavaScript for enhanced usability
 
 ## Usage
 
@@ -28,55 +30,79 @@ A simple web-based database administration tool that supports all DDAO storage a
 ```
 
 Options:
-- `-storage`: Storage type (default: sqlite)
-- `-conn`: Connection string for the storage (default: file:admin.db)
 - `-port`: Port to run the web server on (default: 8080)
 
-### Examples
+### Starting the Tool
 
-#### SQLite (Default)
 ```bash
-go run . -storage sqlite -conn "file:test.db"
+# Build the tool
+go build -o dbadmin .
+
+# Start the web server
+./dbadmin
+
+# Or specify a custom port
+./dbadmin -port 9000
+```
+
+The tool will start without any database connection. Navigate to the web interface to connect to your preferred storage adapter.
+
+### Connecting to Storage Adapters
+
+Once the web server is running, navigate to `http://localhost:8080` (or your specified port) to access the DSN connection screen. The interface provides:
+
+1. **Storage Type Selection**: Choose from all supported storage adapters
+2. **Connection String Input**: Dynamic placeholder and examples based on selected storage type
+3. **Interactive Help**: Real-time connection string examples and format guidance
+
+### Connection String Examples
+
+The web interface provides interactive examples, but here are the formats for reference:
+
+#### SQLite
+```
+file:database.db
+:memory:
 ```
 
 #### PostgreSQL
-```bash
-go run . -storage postgres -conn "postgres://user:password@localhost/dbname?sslmode=disable"
+```
+postgres://user:password@localhost:5432/dbname?sslmode=disable
 ```
 
 #### SQL Server
-```bash
-go run . -storage sqlserver -conn "sqlserver://user:password@localhost:1433?database=dbname"
+```
+sqlserver://user:password@localhost:1433?database=dbname
 ```
 
 #### Oracle
-```bash
-go run . -storage oracle -conn "oracle://user:password@localhost:1521/XE"
+```
+oracle://user:password@localhost:1521/XE
 ```
 
 #### CockroachDB
-```bash
-go run . -storage cockroach -conn "postgres://user:password@localhost:26257/dbname?sslmode=disable"
+```
+postgres://user:password@localhost:26257/dbname?sslmode=disable
 ```
 
 #### YugabyteDB
-```bash
-go run . -storage yugabyte -conn "postgres://user:password@localhost:5433/dbname?sslmode=disable"
+```
+postgres://user:password@localhost:5433/dbname?sslmode=disable
 ```
 
 #### TiDB
-```bash
-go run . -storage tidb -conn "user:password@tcp(localhost:4000)/dbname"
+```
+user:password@tcp(localhost:4000)/dbname
 ```
 
 #### ScyllaDB/Cassandra
-```bash
-go run . -storage scylla -conn "localhost:9042/keyspace"
+```
+localhost:9042/keyspace
 ```
 
 #### Amazon S3
-```bash
-go run . -storage s3 -conn "bucket-name"
+```
+bucket-name
 ```
 
 ## Building
@@ -93,9 +119,11 @@ Once started, open your browser and navigate to `http://localhost:8080` (or the 
 
 The web interface provides:
 
-1. **Dashboard**: Overview of the storage configuration and available tables
-2. **Tables**: Detailed view of all tables and their schemas
-3. **Alter Table**: Interface for adding new columns to existing tables
+1. **Connection Screen**: Initial screen for connecting to any storage adapter with dynamic examples
+2. **Dashboard**: Overview of the storage configuration and available tables (shown after connection)
+3. **Tables**: Detailed view of all tables and their schemas
+4. **Alter Table**: Interface for adding new columns to existing tables
+5. **Disconnect**: Option to disconnect and switch to a different storage adapter
 
 ## ALTER TABLE Operations
 

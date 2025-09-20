@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jadedragon942/ddao/object"
 	"github.com/jadedragon942/ddao/schema"
 )
 
@@ -40,6 +43,8 @@ func NewWebServer(adminServer *AdminServer, port int) *WebServer {
 
 func (ws *WebServer) Start() error {
 	http.HandleFunc("/", ws.handleHome)
+	http.HandleFunc("/connect", ws.handleConnect)
+	http.HandleFunc("/disconnect", ws.handleDisconnect)
 	http.HandleFunc("/tables", ws.handleTables)
 	http.HandleFunc("/table/", ws.handleTable)
 	http.HandleFunc("/alter", ws.handleAlterTable)
@@ -52,6 +57,11 @@ func (ws *WebServer) Start() error {
 }
 
 func (ws *WebServer) handleHome(w http.ResponseWriter, r *http.Request) {
+	if !ws.adminServer.connected {
+		ws.handleConnect(w, r)
+		return
+	}
+
 	tmpl := `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -68,6 +78,7 @@ func (ws *WebServer) handleHome(w http.ResponseWriter, r *http.Request) {
                 <a href="/" class="active">Dashboard</a>
                 <a href="/tables">Tables</a>
                 <a href="/alter">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
             </nav>
         </header>
 
@@ -81,6 +92,7 @@ func (ws *WebServer) handleHome(w http.ResponseWriter, r *http.Request) {
                         <p><strong>Type:</strong> {{.StorageType}}</p>
                         <p><strong>Connection:</strong> {{.ConnString}}</p>
                         <p><strong>Port:</strong> {{.Port}}</p>
+                        <p><strong>Status:</strong> <span class="status-connected">Connected</span></p>
                     </div>
 
                     <div class="stat-card">
@@ -134,7 +146,339 @@ func (ws *WebServer) handleHome(w http.ResponseWriter, r *http.Request) {
 	t.Execute(w, data)
 }
 
+func (ws *WebServer) handleConnect(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		ws.showConnectForm(w, r)
+	} else if r.Method == "POST" {
+		ws.processConnect(w, r)
+	}
+}
+
+func (ws *WebServer) showConnectForm(w http.ResponseWriter, r *http.Request) {
+	tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect to Database - Database Administration Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        function updateConnectionString() {
+            const storageType = document.getElementById('storageType').value;
+            const connStringInput = document.getElementById('connString');
+            const exampleDiv = document.getElementById('connectionExample');
+
+            const examples = {
+                'sqlite': {
+                    placeholder: 'file:database.db',
+                    example: 'Examples: file:mydb.db, :memory:'
+                },
+                'postgres': {
+                    placeholder: 'postgres://user:password@localhost/dbname?sslmode=disable',
+                    example: 'Example: postgres://user:pass@localhost:5432/mydb?sslmode=disable'
+                },
+                'sqlserver': {
+                    placeholder: 'sqlserver://user:password@localhost:1433?database=dbname',
+                    example: 'Example: sqlserver://sa:MyPass123@localhost:1433?database=mydb'
+                },
+                'oracle': {
+                    placeholder: 'oracle://user:password@localhost:1521/XE',
+                    example: 'Example: oracle://system:oracle@localhost:1521/XE'
+                },
+                'cockroach': {
+                    placeholder: 'postgres://user:password@localhost:26257/dbname?sslmode=disable',
+                    example: 'Example: postgres://root@localhost:26257/defaultdb?sslmode=disable'
+                },
+                'yugabyte': {
+                    placeholder: 'postgres://user:password@localhost:5433/dbname?sslmode=disable',
+                    example: 'Example: postgres://yugabyte@localhost:5433/yugabyte?sslmode=disable'
+                },
+                'tidb': {
+                    placeholder: 'user:password@tcp(localhost:4000)/dbname',
+                    example: 'Example: root:@tcp(localhost:4000)/test'
+                },
+                'scylla': {
+                    placeholder: 'localhost:9042/keyspace',
+                    example: 'Example: 127.0.0.1:9042/mykeyspace'
+                },
+                's3': {
+                    placeholder: 'bucket-name',
+                    example: 'Example: my-s3-bucket'
+                }
+            };
+
+            if (examples[storageType]) {
+                connStringInput.placeholder = examples[storageType].placeholder;
+                exampleDiv.textContent = examples[storageType].example;
+            }
+        }
+
+        window.onload = function() {
+            updateConnectionString();
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Database Administration Tool</h1>
+            <nav>
+                <a href="/connect" class="active">Connect</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="section">
+                <div class="section-header">
+                    <h2>Connect to Database</h2>
+                </div>
+
+                {{if .Message}}
+                <div class="{{if .Success}}success{{else}}error{{end}}">
+                    <p>{{.Message}}</p>
+                </div>
+                {{end}}
+
+                <form method="POST" class="form">
+                    <div class="form-group">
+                        <label for="storageType">Storage Type:</label>
+                        <select id="storageType" name="storageType" onchange="updateConnectionString()" required>
+                            <option value="sqlite">SQLite</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="sqlserver">SQL Server</option>
+                            <option value="oracle">Oracle</option>
+                            <option value="cockroach">CockroachDB</option>
+                            <option value="yugabyte">YugabyteDB</option>
+                            <option value="tidb">TiDB</option>
+                            <option value="scylla">ScyllaDB/Cassandra</option>
+                            <option value="s3">Amazon S3</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="connString">Connection String:</label>
+                        <input type="text" id="connString" name="connString" required>
+                        <div id="connectionExample" class="connection-example"></div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Connect</button>
+                    </div>
+                </form>
+
+                <div class="connection-help">
+                    <h3>Connection String Examples</h3>
+                    <ul>
+                        <li><strong>SQLite:</strong> file:database.db or :memory:</li>
+                        <li><strong>PostgreSQL:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>SQL Server:</strong> sqlserver://user:password@host:port?database=dbname</li>
+                        <li><strong>Oracle:</strong> oracle://user:password@host:port/service</li>
+                        <li><strong>CockroachDB:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>YugabyteDB:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>TiDB:</strong> user:password@tcp(host:port)/database</li>
+                        <li><strong>ScyllaDB:</strong> host:port/keyspace</li>
+                        <li><strong>Amazon S3:</strong> bucket-name</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>`
+
+	t, err := template.New("connect").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		Message string
+		Success bool
+	}{}
+
+	w.Header().Set("Content-Type", "text/html")
+	t.Execute(w, data)
+}
+
+func (ws *WebServer) processConnect(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+
+	storageType := r.FormValue("storageType")
+	connString := r.FormValue("connString")
+
+	if storageType == "" || connString == "" {
+		ws.showConnectFormWithMessage(w, "Storage type and connection string are required", false)
+		return
+	}
+
+	err := ws.adminServer.Connect(storageType, connString)
+	if err != nil {
+		ws.showConnectFormWithMessage(w, fmt.Sprintf("Failed to connect: %v", err), false)
+		return
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (ws *WebServer) showConnectFormWithMessage(w http.ResponseWriter, message string, success bool) {
+	tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect to Database - Database Administration Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script>
+        function updateConnectionString() {
+            const storageType = document.getElementById('storageType').value;
+            const connStringInput = document.getElementById('connString');
+            const exampleDiv = document.getElementById('connectionExample');
+
+            const examples = {
+                'sqlite': {
+                    placeholder: 'file:database.db',
+                    example: 'Examples: file:mydb.db, :memory:'
+                },
+                'postgres': {
+                    placeholder: 'postgres://user:password@localhost/dbname?sslmode=disable',
+                    example: 'Example: postgres://user:pass@localhost:5432/mydb?sslmode=disable'
+                },
+                'sqlserver': {
+                    placeholder: 'sqlserver://user:password@localhost:1433?database=dbname',
+                    example: 'Example: sqlserver://sa:MyPass123@localhost:1433?database=mydb'
+                },
+                'oracle': {
+                    placeholder: 'oracle://user:password@localhost:1521/XE',
+                    example: 'Example: oracle://system:oracle@localhost:1521/XE'
+                },
+                'cockroach': {
+                    placeholder: 'postgres://user:password@localhost:26257/dbname?sslmode=disable',
+                    example: 'Example: postgres://root@localhost:26257/defaultdb?sslmode=disable'
+                },
+                'yugabyte': {
+                    placeholder: 'postgres://user:password@localhost:5433/dbname?sslmode=disable',
+                    example: 'Example: postgres://yugabyte@localhost:5433/yugabyte?sslmode=disable'
+                },
+                'tidb': {
+                    placeholder: 'user:password@tcp(localhost:4000)/dbname',
+                    example: 'Example: root:@tcp(localhost:4000)/test'
+                },
+                'scylla': {
+                    placeholder: 'localhost:9042/keyspace',
+                    example: 'Example: 127.0.0.1:9042/mykeyspace'
+                },
+                's3': {
+                    placeholder: 'bucket-name',
+                    example: 'Example: my-s3-bucket'
+                }
+            };
+
+            if (examples[storageType]) {
+                connStringInput.placeholder = examples[storageType].placeholder;
+                exampleDiv.textContent = examples[storageType].example;
+            }
+        }
+
+        window.onload = function() {
+            updateConnectionString();
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Database Administration Tool</h1>
+            <nav>
+                <a href="/connect" class="active">Connect</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="section">
+                <div class="section-header">
+                    <h2>Connect to Database</h2>
+                </div>
+
+                <div class="{{if .Success}}success{{else}}error{{end}}">
+                    <p>{{.Message}}</p>
+                </div>
+
+                <form method="POST" class="form">
+                    <div class="form-group">
+                        <label for="storageType">Storage Type:</label>
+                        <select id="storageType" name="storageType" onchange="updateConnectionString()" required>
+                            <option value="sqlite">SQLite</option>
+                            <option value="postgres">PostgreSQL</option>
+                            <option value="sqlserver">SQL Server</option>
+                            <option value="oracle">Oracle</option>
+                            <option value="cockroach">CockroachDB</option>
+                            <option value="yugabyte">YugabyteDB</option>
+                            <option value="tidb">TiDB</option>
+                            <option value="scylla">ScyllaDB/Cassandra</option>
+                            <option value="s3">Amazon S3</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="connString">Connection String:</label>
+                        <input type="text" id="connString" name="connString" required>
+                        <div id="connectionExample" class="connection-example"></div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Connect</button>
+                    </div>
+                </form>
+
+                <div class="connection-help">
+                    <h3>Connection String Examples</h3>
+                    <ul>
+                        <li><strong>SQLite:</strong> file:database.db or :memory:</li>
+                        <li><strong>PostgreSQL:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>SQL Server:</strong> sqlserver://user:password@host:port?database=dbname</li>
+                        <li><strong>Oracle:</strong> oracle://user:password@host:port/service</li>
+                        <li><strong>CockroachDB:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>YugabyteDB:</strong> postgres://user:password@host:port/database?sslmode=disable</li>
+                        <li><strong>TiDB:</strong> user:password@tcp(host:port)/database</li>
+                        <li><strong>ScyllaDB:</strong> host:port/keyspace</li>
+                        <li><strong>Amazon S3:</strong> bucket-name</li>
+                    </ul>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>`
+
+	t, err := template.New("connectWithMessage").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		Message string
+		Success bool
+	}{
+		Message: message,
+		Success: success,
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	t.Execute(w, data)
+}
+
+func (ws *WebServer) handleDisconnect(w http.ResponseWriter, r *http.Request) {
+	ws.adminServer.Disconnect()
+	http.Redirect(w, r, "/connect", http.StatusSeeOther)
+}
+
 func (ws *WebServer) handleTables(w http.ResponseWriter, r *http.Request) {
+	if !ws.adminServer.connected {
+		http.Redirect(w, r, "/connect", http.StatusSeeOther)
+		return
+	}
 	tmpl := `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -151,6 +495,7 @@ func (ws *WebServer) handleTables(w http.ResponseWriter, r *http.Request) {
                 <a href="/">Dashboard</a>
                 <a href="/tables" class="active">Tables</a>
                 <a href="/alter">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
             </nav>
         </header>
 
@@ -208,6 +553,11 @@ func (ws *WebServer) handleTables(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ws *WebServer) handleTable(w http.ResponseWriter, r *http.Request) {
+	if !ws.adminServer.connected {
+		http.Redirect(w, r, "/connect", http.StatusSeeOther)
+		return
+	}
+
 	tableName := strings.TrimPrefix(r.URL.Path, "/table/")
 	if tableName == "" {
 		http.Error(w, "Table name required", http.StatusBadRequest)
@@ -230,6 +580,7 @@ func (ws *WebServer) handleTable(w http.ResponseWriter, r *http.Request) {
                 <a href="/">Dashboard</a>
                 <a href="/tables">Tables</a>
                 <a href="/alter">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
             </nav>
         </header>
 
@@ -340,6 +691,11 @@ func (ws *WebServer) handleTable(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ws *WebServer) handleAlterTable(w http.ResponseWriter, r *http.Request) {
+	if !ws.adminServer.connected {
+		http.Redirect(w, r, "/connect", http.StatusSeeOther)
+		return
+	}
+
 	if r.Method == "GET" {
 		ws.showAlterTableForm(w, r)
 	} else if r.Method == "POST" {
@@ -364,6 +720,7 @@ func (ws *WebServer) showAlterTableForm(w http.ResponseWriter, r *http.Request) 
                 <a href="/">Dashboard</a>
                 <a href="/tables">Tables</a>
                 <a href="/alter" class="active">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
             </nav>
         </header>
 
@@ -487,6 +844,7 @@ func (ws *WebServer) showAlterTableFormWithMessage(w http.ResponseWriter, messag
                 <a href="/">Dashboard</a>
                 <a href="/tables">Tables</a>
                 <a href="/alter" class="active">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
             </nav>
         </header>
 
@@ -571,8 +929,317 @@ func (ws *WebServer) showAlterTableFormWithMessage(w http.ResponseWriter, messag
 }
 
 func (ws *WebServer) handleInsert(w http.ResponseWriter, r *http.Request) {
-	// Placeholder for insert functionality
-	http.Error(w, "Insert functionality not implemented yet", http.StatusNotImplemented)
+	if !ws.adminServer.connected {
+		http.Redirect(w, r, "/connect", http.StatusSeeOther)
+		return
+	}
+
+	if r.Method == "GET" {
+		ws.showInsertForm(w, r)
+	} else if r.Method == "POST" {
+		ws.processInsert(w, r)
+	}
+}
+
+func (ws *WebServer) showInsertForm(w http.ResponseWriter, r *http.Request) {
+	tableName := r.URL.Query().Get("table")
+	if tableName == "" {
+		http.Error(w, "Table name required", http.StatusBadRequest)
+		return
+	}
+
+	tableInfo := ws.getTableInfo(tableName)
+	if tableInfo == nil {
+		http.Error(w, "Table not found", http.StatusNotFound)
+		return
+	}
+
+	tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insert Record - {{.TableName}} - Database Administration Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Database Administration Tool</h1>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/tables">Tables</a>
+                <a href="/alter">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="section">
+                <div class="section-header">
+                    <h2>Insert Record - {{.TableName}}</h2>
+                    <a href="/table/{{.TableName}}" class="btn btn-secondary">Back to Table</a>
+                </div>
+
+                {{if .Message}}
+                <div class="{{if .Success}}success{{else}}error{{end}}">
+                    <p>{{.Message}}</p>
+                </div>
+                {{end}}
+
+                <form method="POST" class="form">
+                    <input type="hidden" name="table" value="{{.TableName}}">
+
+                    {{range .Fields}}
+                    <div class="form-group">
+                        <label for="{{.Name}}">{{.Name}} ({{.DataType}}){{if not .Nullable}} *{{end}}:</label>
+                        {{if eq .DataType "TEXT"}}
+                            <input type="text" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "INTEGER"}}
+                            <input type="number" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "REAL"}}
+                            <input type="number" step="any" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "BOOLEAN"}}
+                            <select id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                                {{if .Nullable}}<option value="">-- Select --</option>{{end}}
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                            </select>
+                        {{else if eq .DataType "DATETIME"}}
+                            <input type="datetime-local" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "JSON"}}
+                            <textarea id="{{.Name}}" name="{{.Name}}" rows="4" placeholder="{}" {{if not .Nullable}}required{{end}}></textarea>
+                        {{else}}
+                            <input type="text" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{end}}
+                        {{if .Nullable}}<small class="field-note">Optional field</small>{{end}}
+                    </div>
+                    {{end}}
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Insert Record</button>
+                        <a href="/table/{{.TableName}}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</body>
+</html>`
+
+	t, err := template.New("insertForm").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		TableName string
+		Fields    []FieldInfo
+		Message   string
+		Success   bool
+	}{
+		TableName: tableName,
+		Fields:    tableInfo.Fields,
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	t.Execute(w, data)
+}
+
+func (ws *WebServer) processInsert(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+
+	tableName := r.FormValue("table")
+	if tableName == "" {
+		http.Error(w, "Table name required", http.StatusBadRequest)
+		return
+	}
+
+	tableInfo := ws.getTableInfo(tableName)
+	if tableInfo == nil {
+		http.Error(w, "Table not found", http.StatusNotFound)
+		return
+	}
+
+	// Create new object
+	obj := object.New()
+	obj.SetTableName(tableName)
+
+	// Process each field
+	for _, field := range tableInfo.Fields {
+		value := r.FormValue(field.Name)
+
+		// Skip empty values for nullable fields
+		if value == "" && field.Nullable {
+			continue
+		}
+
+		// Convert value based on data type
+		switch field.DataType {
+		case "TEXT":
+			obj.SetField(field.Name, value)
+		case "INTEGER":
+			if value != "" {
+				if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
+					obj.SetField(field.Name, intVal)
+				} else {
+					ws.showInsertFormWithMessage(w, r, fmt.Sprintf("Invalid integer value for field '%s': %s", field.Name, value), false)
+					return
+				}
+			}
+		case "REAL":
+			if value != "" {
+				if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
+					obj.SetField(field.Name, floatVal)
+				} else {
+					ws.showInsertFormWithMessage(w, r, fmt.Sprintf("Invalid float value for field '%s': %s", field.Name, value), false)
+					return
+				}
+			}
+		case "BOOLEAN":
+			if value != "" {
+				if boolVal, err := strconv.ParseBool(value); err == nil {
+					obj.SetField(field.Name, boolVal)
+				} else {
+					ws.showInsertFormWithMessage(w, r, fmt.Sprintf("Invalid boolean value for field '%s': %s", field.Name, value), false)
+					return
+				}
+			}
+		case "DATETIME":
+			if value != "" {
+				if timeVal, err := time.Parse("2006-01-02T15:04", value); err == nil {
+					obj.SetField(field.Name, timeVal.Format("2006-01-02 15:04:05"))
+				} else {
+					ws.showInsertFormWithMessage(w, r, fmt.Sprintf("Invalid datetime value for field '%s': %s", field.Name, value), false)
+					return
+				}
+			}
+		default:
+			obj.SetField(field.Name, value)
+		}
+	}
+
+	// Insert the object
+	ctx := context.Background()
+	id, created, err := ws.adminServer.storage.Insert(ctx, obj)
+	if err != nil {
+		ws.showInsertFormWithMessage(w, r, fmt.Sprintf("Failed to insert record: %v", err), false)
+		return
+	}
+
+	if created {
+		// Redirect to the table view with success message
+		http.Redirect(w, r, fmt.Sprintf("/table/%s?inserted=true&id=%s", tableName, string(id)), http.StatusSeeOther)
+	} else {
+		ws.showInsertFormWithMessage(w, r, "Record was not created", false)
+	}
+}
+
+func (ws *WebServer) showInsertFormWithMessage(w http.ResponseWriter, r *http.Request, message string, success bool) {
+	tableName := r.FormValue("table")
+	if tableName == "" {
+		http.Error(w, "Table name required", http.StatusBadRequest)
+		return
+	}
+
+	tableInfo := ws.getTableInfo(tableName)
+	if tableInfo == nil {
+		http.Error(w, "Table not found", http.StatusNotFound)
+		return
+	}
+
+	tmpl := `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insert Record - {{.TableName}} - Database Administration Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Database Administration Tool</h1>
+            <nav>
+                <a href="/">Dashboard</a>
+                <a href="/tables">Tables</a>
+                <a href="/alter">Alter Table</a>
+                <a href="/disconnect" class="disconnect-btn">Disconnect</a>
+            </nav>
+        </header>
+
+        <main>
+            <div class="section">
+                <div class="section-header">
+                    <h2>Insert Record - {{.TableName}}</h2>
+                    <a href="/table/{{.TableName}}" class="btn btn-secondary">Back to Table</a>
+                </div>
+
+                <div class="{{if .Success}}success{{else}}error{{end}}">
+                    <p>{{.Message}}</p>
+                </div>
+
+                <form method="POST" class="form">
+                    <input type="hidden" name="table" value="{{.TableName}}">
+
+                    {{range .Fields}}
+                    <div class="form-group">
+                        <label for="{{.Name}}">{{.Name}} ({{.DataType}}){{if not .Nullable}} *{{end}}:</label>
+                        {{if eq .DataType "TEXT"}}
+                            <input type="text" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "INTEGER"}}
+                            <input type="number" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "REAL"}}
+                            <input type="number" step="any" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "BOOLEAN"}}
+                            <select id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                                {{if .Nullable}}<option value="">-- Select --</option>{{end}}
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                            </select>
+                        {{else if eq .DataType "DATETIME"}}
+                            <input type="datetime-local" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{else if eq .DataType "JSON"}}
+                            <textarea id="{{.Name}}" name="{{.Name}}" rows="4" placeholder="{}" {{if not .Nullable}}required{{end}}></textarea>
+                        {{else}}
+                            <input type="text" id="{{.Name}}" name="{{.Name}}" {{if not .Nullable}}required{{end}}>
+                        {{end}}
+                        {{if .Nullable}}<small class="field-note">Optional field</small>{{end}}
+                    </div>
+                    {{end}}
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Insert Record</button>
+                        <a href="/table/{{.TableName}}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+</body>
+</html>`
+
+	t, err := template.New("insertFormWithMessage").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := struct {
+		TableName string
+		Fields    []FieldInfo
+		Message   string
+		Success   bool
+	}{
+		TableName: tableName,
+		Fields:    tableInfo.Fields,
+		Message:   message,
+		Success:   success,
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	t.Execute(w, data)
 }
 
 func (ws *WebServer) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -591,6 +1258,10 @@ func (ws *WebServer) handleStatic(w http.ResponseWriter, r *http.Request) {
 
 func (ws *WebServer) getTableList() []TableInfo {
 	var tables []TableInfo
+
+	if !ws.adminServer.connected || ws.adminServer.storage == nil {
+		return tables
+	}
 
 	// Get schema from storage if available
 	if baseStorage, ok := ws.adminServer.storage.(interface{ GetSchema() *schema.Schema }); ok {
@@ -670,6 +1341,7 @@ header h1 {
 nav {
     display: flex;
     gap: 2rem;
+    align-items: center;
 }
 
 nav a {
@@ -983,6 +1655,70 @@ main {
 
 .empty-state a:hover {
     text-decoration: underline;
+}
+
+/* Connection styles */
+.disconnect-btn {
+    background-color: #e74c3c !important;
+    margin-left: auto;
+}
+
+.disconnect-btn:hover {
+    background-color: #c0392b !important;
+}
+
+.status-connected {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+.connection-example {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+.connection-help {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    margin-top: 2rem;
+}
+
+.connection-help h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.connection-help ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+.connection-help li {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+}
+
+.connection-help strong {
+    color: #2c3e50;
+    display: inline-block;
+    min-width: 120px;
+}
+
+.field-note {
+    display: block;
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    margin-top: 0.25rem;
+    font-style: italic;
 }
 
 /* Responsive design */

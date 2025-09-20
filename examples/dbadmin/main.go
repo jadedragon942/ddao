@@ -23,45 +23,49 @@ type Config struct {
 	StorageType string
 	ConnString  string
 	Port        int
+	Connected   bool
 }
 
 type AdminServer struct {
 	storage    storage.Storage
 	config     *Config
 	webServer  *WebServer
+	connected  bool
 }
 
 func main() {
-	storageType := flag.String("storage", "sqlite", "Storage type (sqlite, postgres, sqlserver, oracle, cockroach, yugabyte, tidb, scylla, s3)")
-	connString := flag.String("conn", "file:admin.db", "Connection string for the storage")
 	port := flag.Int("port", 8080, "Port to run the web server on")
 	flag.Parse()
 
 	config := &Config{
-		StorageType: *storageType,
-		ConnString:  *connString,
-		Port:        *port,
+		Port:      *port,
+		Connected: false,
 	}
 
-	server, err := NewAdminServer(config)
-	if err != nil {
-		log.Fatalf("Failed to create admin server: %v", err)
+	server := &AdminServer{
+		config:    config,
+		connected: false,
 	}
 
-	if err := server.Start(); err != nil {
-		log.Fatalf("Failed to start admin server: %v", err)
+	server.webServer = NewWebServer(server, config.Port)
+
+	log.Printf("Starting Database Administration Tool")
+	log.Printf("Web Interface: http://localhost:%d", config.Port)
+
+	if err := server.webServer.Start(); err != nil {
+		log.Fatalf("Failed to start web server: %v", err)
 	}
 }
 
-func NewAdminServer(config *Config) (*AdminServer, error) {
-	stor, err := createStorage(config.StorageType)
+func (s *AdminServer) Connect(storageType, connString string) error {
+	stor, err := createStorage(storageType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create storage: %w", err)
+		return fmt.Errorf("failed to create storage: %w", err)
 	}
 
 	ctx := context.Background()
-	if err := stor.Connect(ctx, config.ConnString); err != nil {
-		return nil, fmt.Errorf("failed to connect to storage: %w", err)
+	if err := stor.Connect(ctx, connString); err != nil {
+		return fmt.Errorf("failed to connect to storage: %w", err)
 	}
 
 	// Create a basic schema for demonstration
@@ -70,23 +74,26 @@ func NewAdminServer(config *Config) (*AdminServer, error) {
 		log.Printf("Warning: Failed to create test tables: %v", err)
 	}
 
-	server := &AdminServer{
-		storage: stor,
-		config:  config,
-	}
+	s.storage = stor
+	s.config.StorageType = storageType
+	s.config.ConnString = connString
+	s.config.Connected = true
+	s.connected = true
 
-	server.webServer = NewWebServer(server, config.Port)
-
-	return server, nil
+	log.Printf("Connected to %s storage: %s", storageType, connString)
+	return nil
 }
 
-func (s *AdminServer) Start() error {
-	log.Printf("Starting Database Administration Tool")
-	log.Printf("Storage Type: %s", s.config.StorageType)
-	log.Printf("Connection: %s", s.config.ConnString)
-	log.Printf("Web Interface: http://localhost:%d", s.config.Port)
-
-	return s.webServer.Start()
+func (s *AdminServer) Disconnect() {
+	if s.storage != nil {
+		s.storage.ResetConnection(context.Background())
+		s.storage = nil
+	}
+	s.connected = false
+	s.config.Connected = false
+	s.config.StorageType = ""
+	s.config.ConnString = ""
+	log.Printf("Disconnected from storage")
 }
 
 func createStorage(storageType string) (storage.Storage, error) {
