@@ -150,7 +150,7 @@ func objectToUser(obj *object.Object) User {
 		}
 	}
 	if profileStr, exists := obj.GetString("profile"); exists && profileStr != "" {
-		var profile map[string]interface{}
+		var profile map[string]any
 		if err := json.Unmarshal([]byte(profileStr), &profile); err == nil {
 			user.Profile = profile
 		}
@@ -211,7 +211,7 @@ func objectToPost(obj *object.Object) Post {
 		}
 	}
 	if metadataStr, exists := obj.GetString("metadata"); exists && metadataStr != "" {
-		var metadata map[string]interface{}
+		var metadata map[string]any
 		if err := json.Unmarshal([]byte(metadataStr), &metadata); err == nil {
 			post.Metadata = metadata
 		}
